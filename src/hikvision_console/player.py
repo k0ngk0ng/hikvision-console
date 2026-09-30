@@ -48,7 +48,8 @@ def load_vlc():
     try:
         _instance = vlc.Instance("--ignore-config", "--no-media-library",
                                  "--no-plugins-cache", "--no-video-title-show", "--no-osd",
-                                 "--no-snapshot-preview", "--keystore=memory", "--quiet",
+                                 "--no-snapshot-preview", "--keystore=memory",
+                                 "--verbose=2" if os.environ.get("HIKVISION_VLC_DEBUG") == "1" else "--quiet",
                                  "--no-lua", "--stats", "--intf=dummy")
     except Exception:
         raise RuntimeError("未找到可用的 VLC 播放库，请安装与应用架构一致的 VLC 3.x") from None
@@ -260,6 +261,7 @@ class Player(QObject):
                 self.has_played = True
                 self.playing.emit()
                 self.player.audio_set_mute(self.muted)
+                self.set_zoom(self.zoom)
                 if self.speed != 1:
                     self.player.set_rate(self.speed)
             self.status.emit("实时播放" if self.live else ("已暂停" if self.paused else "录像回放"))

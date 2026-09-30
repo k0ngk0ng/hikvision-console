@@ -37,10 +37,10 @@ jobs:
         run: python scripts/build.py
       - name: Native packaged playback test (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a python scripts/native_ci.py --frozen
+        run: xvfb-run -a python scripts/native_ci.py --frozen --verbose
       - name: Native packaged playback test (macOS / Windows)
         if: runner.os != 'Linux'
-        run: python scripts/native_ci.py --frozen
+        run: python scripts/native_ci.py --frozen --verbose
       - name: Archive tested application
         run: python scripts/package_release.py
       - uses: actions/upload-artifact@v4

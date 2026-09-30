@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QWidget
 
-from .player import Player, shutdown_vlc
+from .player import Player, load_vlc, shutdown_vlc
 
 
 def run(app, path: Path, directory: Path):
@@ -17,6 +17,7 @@ def run(app, path: Path, directory: Path):
     surface.show()
     player = Player(surface)
     result = {"frames": 0, "pause": False, "rate": False, "snapshot": False, "native_vout": False}
+    player.status.connect(lambda status: result.update(last_status=status))
     player.metrics.connect(lambda data: result.update(frames=max(result["frames"], data["frames"])))
     started = [False]
     screenshot = directory / "native-smoke.png"
@@ -58,6 +59,11 @@ def run(app, path: Path, directory: Path):
 
     directory.mkdir(parents=True, exist_ok=True)
     player.playing.connect(ready)
+    try:
+        vlc, _ = load_vlc()
+        result["vlc_version"] = vlc.libvlc_get_version().decode(errors="replace")
+    except Exception as exc:
+        result["component_error"] = f"{type(exc).__name__}: {exc}"
     player.start(path.resolve().as_uri(), hardware=False)
     QTimer.singleShot(15000, finish)
     app.exec()
