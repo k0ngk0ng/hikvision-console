@@ -1,0 +1,14 @@
+.nvrpass
+.venv/
+.cache/
+.tmp/
+.hikvision-console/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+.DS_Store
+artifacts/private/
+
