@@ -147,7 +147,7 @@ class Player(QObject):
         profile = PROFILES[self.profile]
         self.media = instance.media_new(self.bridge.url if self.bridge else self.url)
         for option in (f":network-caching={profile.cache_ms}", ":clock-jitter=0", ":no-video-title-show",
-                       ":no-sout-all", ":rtsp-timeout=10", ":no-input-repeat",
+                       ":no-sout-all", ":rtsp-timeout=10", ":no-input-repeat", ":codec=avcodec",
                        f":avcodec-hw={'any' if self.hardware else 'none'}"):
             self.media.add_option(option)
         if self.transport == "tcp":
