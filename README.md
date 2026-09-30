@@ -25,6 +25,8 @@
 
 三平台构建由 [GitHub Actions](https://github.com/k0ngk0ng/hikvision-console/actions/workflows/desktop.yml) 执行。每个平台通过测试后提供带系统/架构名称的压缩包、SHA-256 校验文件和构建记录。下载 Actions artifact 后，还需解压里面的应用压缩包；保留 macOS/Linux 的执行权限。
 
+Actions 当前构建 macOS Intel x86_64、Windows x64 和 Linux x86_64。Apple Silicon 可通过 Rosetta 运行 Intel 包，也可从源码构建 ARM64 版本（已在本地验证）。macOS CI 使用 Intel runner，以支持打包后 VLC 原生 OpenGL 播放测试。
+
 macOS / Windows 安装包可包含 VLC 和 FFmpeg，无需 Python。Linux 构建使用系统 VLC，需要安装 `vlc` / `libvlc5`，并有 X11 或 XWayland。各平台必须在对应平台构建，不能把 macOS 构建当作 Windows 安装包。
 
 首次启动会出现“连接 NVR”窗口。以后使用右上角“连接设备”填写或切换设备。地址只填 IP 或主机名，不要加 `http://`。
