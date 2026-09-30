@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 jobs:
   desktop:
@@ -61,3 +62,64 @@ jobs:
             dist/*.tar.gz
             dist/*.json
             dist/*.sha256
+  release:
+    name: Publish GitHub Release
+    needs: desktop
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: HikvisionConsole-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify release version and archive checksums
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          tag = os.environ['RELEASE_TAG']
+          assert re.fullmatch(r'v\d+\.\d+\.\d+', tag), 'Expected vMAJOR.MINOR.PATCH tag'
+          assert Path(f'docs/releases/{tag}.md').is_file(), 'Release notes are required'
+          root = Path('release-assets')
+          manifests = list(root.glob('*.json'))
+          assert len(manifests) == 3, 'All three platform builds are required'
+          platforms = set()
+          expected_files = set()
+          for path in manifests:
+              data = json.loads(path.read_text())
+              assert data['version'] == tag[1:], 'Tag and application version differ'
+              assert data['verification']['passed'], 'Packaged application check failed'
+              name = data['archive']
+              assert Path(name).name == name, 'Invalid archive name'
+              archive = root / name
+              with archive.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              assert digest == data['sha256'], f'Checksum mismatch: {name}'
+              checksum = path.with_suffix('.sha256')
+              assert checksum.read_text().strip() == f'{digest}  {name}'
+              expected_files.update((path.name, archive.name, checksum.name))
+              platforms.add(data['system'])
+          assert platforms == {'Darwin', 'Windows', 'Linux'}
+          assert {p.name for p in root.iterdir()} == expected_files, 'Unexpected release files'
+          PY
+      - name: Create draft, upload verified assets, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --draft \
+            --title "Hikvision Console $RELEASE_TAG" \
+            --notes-file "docs/releases/$RELEASE_TAG.md"
+          gh release upload "$RELEASE_TAG" release-assets/*
+          gh release edit "$RELEASE_TAG" --draft=false --latest

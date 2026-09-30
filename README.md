@@ -23,6 +23,8 @@
 
 ### 已打包应用
 
+直接从 [Releases](https://github.com/k0ngk0ng/hikvision-console/releases/latest) 下载对应系统的压缩包。推送 `vMAJOR.MINOR.PATCH` 标签后，Actions 会在三平台构建检查全部成功、版本和 SHA-256 校验通过后发布 Release，并附上安装包、校验文件和构建记录。发布说明位于 `docs/releases/`；标签版本必须与应用版本一致。
+
 三平台构建由 [GitHub Actions](https://github.com/k0ngk0ng/hikvision-console/actions/workflows/desktop.yml) 执行。每个平台通过测试后提供带系统/架构名称的压缩包、SHA-256 校验文件和构建记录。下载 Actions artifact 后，还需解压里面的应用压缩包；保留 macOS/Linux 的执行权限。
 
 Actions 当前构建 macOS Apple Silicon ARM64、Windows x64 和 Linux x86_64。Intel Mac 需要在 Intel Mac 上从源码构建。Windows/Linux 执行打包后原生播放检查；GitHub 的 macOS ARM/Intel runner 均无法创建 VLC 所需的 OpenGL 上下文，因此 macOS 云端只验证 Qt/VLC 组件加载与 FFmpeg 解码，构建 JSON 明确标记 `native_rendering_tested: false`。完整 macOS 原生播放检查需在真实 Mac 执行，本项目已完成本地验证。
