@@ -8,6 +8,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from hikvision_console.models import Channel, Device, Stream
 
 
+def pytest_configure(config):
+    # pytest creates basetemp itself, but not its parent on a clean checkout.
+    (config.rootpath / ".tmp").mkdir(exist_ok=True)
+
+
 @pytest.fixture
 def device():
     return Device("Test NVR", "V1", [

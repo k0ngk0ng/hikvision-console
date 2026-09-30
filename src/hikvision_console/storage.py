@@ -13,7 +13,7 @@ class Settings:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "settings.json"
         try:
-            self.data = json.loads(self.path.read_text())
+            self.data = json.loads(self.path.read_text(encoding="utf-8"))
         except (FileNotFoundError, ValueError):
             self.data = {}
 
@@ -25,7 +25,7 @@ class Settings:
             raise ValueError("Passwords must not be persisted")
         self.data.update(values)
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2))
+        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.chmod(0o600)
         tmp.replace(self.path)
 

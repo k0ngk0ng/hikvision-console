@@ -61,7 +61,7 @@ def main():
         password = os.environ.get("NVR_PASSWORD", "")
         password_file = Path(".nvrpass")
         if not password and password_file.exists():
-            password = password_file.read_text().strip()
+            password = password_file.read_text(encoding="utf-8").strip()
         if not password:
             QTimer.singleShot(0, window.connect_dialog)
         else:
