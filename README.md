@@ -25,7 +25,7 @@
 
 三平台构建由 [GitHub Actions](https://github.com/k0ngk0ng/hikvision-console/actions/workflows/desktop.yml) 执行。每个平台通过测试后提供带系统/架构名称的压缩包、SHA-256 校验文件和构建记录。下载 Actions artifact 后，还需解压里面的应用压缩包；保留 macOS/Linux 的执行权限。
 
-Actions 当前构建 macOS Intel x86_64、Windows x64 和 Linux x86_64。Apple Silicon 可通过 Rosetta 运行 Intel 包，也可从源码构建 ARM64 版本（已在本地验证）。macOS CI 使用 Intel runner，以支持打包后 VLC 原生 OpenGL 播放测试。
+Actions 当前构建 macOS Apple Silicon ARM64、Windows x64 和 Linux x86_64。Intel Mac 需要在 Intel Mac 上从源码构建。Windows/Linux 执行打包后原生播放检查；GitHub 的 macOS ARM/Intel runner 均无法创建 VLC 所需的 OpenGL 上下文，因此 macOS 云端只验证 Qt/VLC 组件加载与 FFmpeg 解码，构建 JSON 明确标记 `native_rendering_tested: false`。完整 macOS 原生播放检查需在真实 Mac 执行，本项目已完成本地验证。
 
 macOS / Windows 安装包可包含 VLC 和 FFmpeg，无需 Python。Linux 构建使用系统 VLC，需要安装 `vlc` / `libvlc5`，并有 X11 或 XWayland。各平台必须在对应平台构建，不能把 macOS 构建当作 Windows 安装包。
 

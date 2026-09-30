@@ -36,7 +36,7 @@ Python 3.11+、PySide6 原生桌面界面。ISAPI 使用 HTTP Digest 获取设�
 
 2026-09-30：28 项自动测试与 Ruff 已通过；具体项目由 `tests/` 定义。macOS、Ubuntu 24.04 ARM64、Windows 11 x64 打包程序的合成视频测试验证了原生画面输出、暂停、倍速、裁剪和截图。Linux 使用 Xvfb 验证 X11 渲染；虚拟机无声卡，不能据此证明物理音频输出。Windows 测试机未打通 NVR 网络，因此真实 NVR 流程在已连通的 macOS 上执行。
 
-[GitHub Actions](https://github.com/k0ngk0ng/hikvision-console/actions/workflows/desktop.yml) 在三个目标系统执行行为测试、打包、打包后原生播放测试，成功后归档产物与 SHA-256 校验文件。每次运行结果与构建架构以 Actions 日志和产物 JSON 为准。
+[GitHub Actions](https://github.com/k0ngk0ng/hikvision-console/actions/workflows/desktop.yml) 在三个目标系统执行行为测试与打包，成功后归档产物与 SHA-256 校验文件。Windows/Linux 另执行打包后原生播放测试。macOS ARM 和 Intel 云端 runner 均实测无法创建 VLC 所需的 CGL 上下文；macOS 云端改为明确的组件检查（Qt 窗口、VLC 加载、FFmpeg 解码），构建记录标记 `native_rendering_tested: false`，不能替代真实 Mac 的原生播放验证。每次运行结果与构建架构以 Actions 日志和产物 JSON 为准。
 
 真实六路预览已运行 10 分钟，期间各通道都有有效画面，但通道 5、6 反复停顿或落后，不能声称无人值守稳定性已证明。早期一次测试中预览中途全部停止，后续包含窗口状态的完整 10 分钟测试未重现；持续落后时现已使用短等待刷新，不将其累计为连接失败而产生 30 秒等待。
 
@@ -45,6 +45,8 @@ Python 3.11+、PySide6 原生桌面界面。ISAPI 使用 HTTP Digest 获取设�
 实机记录在忽略目录 `artifacts/private/`，不放入发布包；合成界面预览在 `artifacts/desktop-preview.png`。验证命令见 README。验收记录随后续真实运行结果更新。
 
 最终修复后的完整实机流程（90 秒六路预览 → 录像搜索 → 单路回放 → 暂停 → 2× → 导出）各项检查通过。导出文件经 ffprobe 验证为 6.008 秒、1920×1080 H.264 视频和 AAC 音频。该结果不覆盖设备拒绝的并发第二路回放，也不代表链路不再卡顿。
+
+随后使用 VLC 3.0.23、显式 avcodec 解码器和默认硬件解码偏好完成了 600 秒预览及同样的回放/导出流程，全部检查通过。采样记录中的重连次数：通道 1–6 分别为 1、15、2、14、19、15；通道 4 已自动回退软件解码。部分通道仍有明显停顿，尚不能将原因唯一归结于运营商、转发设备、NVR 或客户端，也不能把恢复能力等同于稳定流畅。VLC 3.0.23 的本地原生播放与打包播放测试均通过。
 
 ## 凭据与交付边界
 

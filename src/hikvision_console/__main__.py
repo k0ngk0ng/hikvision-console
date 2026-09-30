@@ -13,6 +13,7 @@ def main():
     parser.add_argument("--demo", action="store_true", help="离线演示布局，不连接设备")
     parser.add_argument("--smoke-seconds", type=int, default=0, help=argparse.SUPPRESS)
     parser.add_argument("--self-test", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--component-test", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     # Qt/libVLC use X11 handles on Linux; xcb also works through XWayland.
     if sys.platform.startswith("linux"):
@@ -40,6 +41,9 @@ def main():
         from PySide6.QtCore import QStandardPaths
         os.environ["HIKVISION_HOME"] = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
     settings = Settings()
+    if args.component_test:
+        from .self_test import run_components
+        return run_components(app, args.component_test, settings.directory / "self-test")
     if args.self_test:
         from .self_test import run
         return run(app, args.self_test, settings.directory / "self-test")

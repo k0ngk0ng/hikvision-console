@@ -1,5 +1,6 @@
 """Native rendering smoke test used for source and packaged builds, with synthetic video only."""
 import json
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
@@ -9,6 +10,39 @@ from PySide6.QtWidgets import QWidget
 from .player import Player, load_vlc, shutdown_vlc
 
 
+def run_components(app, path: Path, directory: Path):
+    """Limited hosted-macOS check: explicitly does NOT verify native video output."""
+    from .exports import ffmpeg_binary
+
+    directory.mkdir(parents=True, exist_ok=True)
+    result = {"test_kind": "components", "native_rendering_tested": False, "passed": False}
+    surface = QWidget()
+    surface.resize(640, 360)
+    surface.show()
+    try:
+        app.processEvents()
+        result["qt_surface"] = bool(surface.winId()) and not surface.grab().isNull()
+        vlc, instance = load_vlc()
+        result["vlc_version"] = vlc.libvlc_get_version().decode(errors="replace")
+        media_player = instance.media_player_new()
+        result["vlc_player"] = media_player is not None
+        media_player.release()
+        frame = directory / "decoded.png"
+        subprocess.run([ffmpeg_binary(), "-v", "error", "-i", str(path),
+                        "-frames:v", "1", "-y", str(frame)], check=True, timeout=20)
+        decoded = QImage(str(frame))
+        result["ffmpeg_decode"] = not decoded.isNull() and decoded.width() == 640
+        result["passed"] = all(result[key] for key in ("qt_surface", "vlc_player", "ffmpeg_decode"))
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    finally:
+        surface.close()
+        shutdown_vlc()
+    (directory / "component-smoke.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(json.dumps(result), flush=True)
+    return 0 if result["passed"] else 1
+
+
 def run(app, path: Path, directory: Path):
     surface = QWidget()
     surface.setWindowTitle("Hikvision Console · native smoke test")
@@ -16,7 +50,8 @@ def run(app, path: Path, directory: Path):
     surface.resize(640, 360)
     surface.show()
     player = Player(surface)
-    result = {"frames": 0, "pause": False, "rate": False, "snapshot": False, "native_vout": False}
+    result = {"test_kind": "native", "native_rendering_tested": True,
+              "frames": 0, "pause": False, "rate": False, "snapshot": False, "native_vout": False}
     player.status.connect(lambda status: result.update(last_status=status))
     player.metrics.connect(lambda data: result.update(frames=max(result["frames"], data["frames"])))
     started = [False]

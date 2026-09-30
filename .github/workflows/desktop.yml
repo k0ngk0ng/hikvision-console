@@ -11,9 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Intel runners provide the OpenGL context required for VLC's native
-        # macOS renderer; hosted ARM runners cannot create a CGL context.
-        os: [macos-15-intel, windows-latest, ubuntu-22.04]
+        os: [macos-15, windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -40,11 +38,20 @@ jobs:
       - name: Native packaged playback test (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a python scripts/native_ci.py --frozen --verbose
-      - name: Native packaged playback test (macOS / Windows)
-        if: runner.os != 'Linux'
+      - name: Native packaged playback test (Windows)
+        if: runner.os == 'Windows'
         run: python scripts/native_ci.py --frozen --verbose
+      # Hosted macOS (ARM and Intel) has no CGL context for VLC. Do not report
+      # component checks as native playback: manifests explicitly distinguish them.
+      - name: Packaged component check (macOS; native rendering requires a real Mac)
+        if: runner.os == 'macOS'
+        run: python scripts/native_ci.py --frozen --components-only
       - name: Archive tested application
+        if: runner.os != 'macOS'
         run: python scripts/package_release.py
+      - name: Archive macOS build with component verification record
+        if: runner.os == 'macOS'
+        run: python scripts/package_release.py --components-only
       - uses: actions/upload-artifact@v4
         with:
           name: HikvisionConsole-${{ matrix.os }}-${{ runner.arch }}

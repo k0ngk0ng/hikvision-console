@@ -10,6 +10,7 @@ from hikvision_console.exports import ffmpeg_binary
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--frozen", action="store_true")
+parser.add_argument("--components-only", action="store_true", help="Check components without claiming native video rendering")
 parser.add_argument("--verbose", action="store_true", help="Include VLC diagnostics for this synthetic test")
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
@@ -34,7 +35,10 @@ if args.frozen:
     command = [str(program)]
 else:
     command = [sys.executable, "-m", "hikvision_console"]
-subprocess.run(command + ["--self-test", str(video)], env=environment, check=True, timeout=30)
-result = json.loads((directory / "self-test/native-smoke.json").read_text())
+test_option = "--component-test" if args.components_only else "--self-test"
+report_name = "component-smoke.json" if args.components_only else "native-smoke.json"
+subprocess.run(command + [test_option, str(video)], env=environment, check=True, timeout=30)
+result = json.loads((directory / "self-test" / report_name).read_text())
 assert result["passed"], result
-print("Native rendering, pause, speed, crop and snapshot: PASS")
+print("Components: PASS; native rendering NOT TESTED" if args.components_only
+      else "Native rendering, pause, speed, crop and snapshot: PASS")

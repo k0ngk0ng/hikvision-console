@@ -1,4 +1,5 @@
 """Archive tested desktop builds without losing executable bits or macOS symlinks."""
+import argparse
 import hashlib
 import json
 import platform
@@ -9,14 +10,21 @@ import zipfile
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
+parser = argparse.ArgumentParser()
+parser.add_argument("--components-only", action="store_true", help="macOS hosted build with explicitly limited verification")
+args = parser.parse_args()
+if args.components_only and sys.platform != "darwin":
+    raise SystemExit("Component-only packaging is restricted to hosted macOS builds")
 dist = root / "dist"
 system, arch = platform.system(), platform.machine().lower()
 name = f"HikvisionConsole-0.1.0-{system}-{arch}"
-smoke = json.loads((root / ".tmp/native-ci/self-test/native-smoke.json").read_text())
+report_name = "component-smoke.json" if args.components_only else "native-smoke.json"
+smoke = json.loads((root / ".tmp/native-ci/self-test" / report_name).read_text())
 if not smoke.get("passed"):
     raise SystemExit("Run scripts/native_ci.py --frozen successfully before packaging")
 manifest = {"version": "0.1.0", "system": system, "architecture": arch,
-            "build_os": platform.platform(), "python": platform.python_version(), "native_test": smoke}
+            "build_os": platform.platform(), "python": platform.python_version(),
+            "native_rendering_tested": not args.components_only, "verification": smoke}
 if sys.platform == "darwin":
     bundle = dist / "Hikvision Console.app"
     archive = dist / f"{name}.zip"
