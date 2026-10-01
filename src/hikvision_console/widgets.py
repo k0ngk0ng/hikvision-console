@@ -130,13 +130,16 @@ class VideoTile(QFrame):
     def __init__(self, channel, settings, parent=None, playback=False):
         super().__init__(parent)
         self.channel, self.settings = channel, settings
+        self.immersive = False
         self.setObjectName("Tile")
         self.setAcceptDrops(not playback)
         self.setMinimumSize(240, 210)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 7, 8, 7)
         layout.setSpacing(5)
-        header = QHBoxLayout()
+        self.header = QWidget()
+        header = QHBoxLayout(self.header)
+        header.setContentsMargins(0, 0, 0, 0)
         self.title = DragTitle(f"{channel.id:02d}  {channel.name}", channel.id)
         self.title.setObjectName("TileTitle")
         self.title.double_clicked.connect(lambda: self.focus_requested.emit(channel.id))
@@ -154,7 +157,7 @@ class VideoTile(QFrame):
         expand.setVisible(not playback)
         expand.setFixedWidth(38)
         header.addWidget(expand)
-        layout.addLayout(header)
+        layout.addWidget(self.header)
         self.surface = QFrame()
         self.surface.setObjectName("VideoSurface")
         self.surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
@@ -164,7 +167,9 @@ class VideoTile(QFrame):
         self.state.setWordWrap(True)
         self.state.setMaximumHeight(38)
         layout.addWidget(self.state)
-        footer = QHBoxLayout()
+        self.footer = QWidget()
+        footer = QHBoxLayout(self.footer)
+        footer.setContentsMargins(0, 0, 0, 0)
         self.stats = label("— fps  ·  — kbps", "Subtitle")
         footer.addWidget(self.stats, 1)
         self.mute = button("静音")
@@ -180,11 +185,26 @@ class VideoTile(QFrame):
         self.zoom.setToolTip("数字放大（画面中心）")
         self.zoom.setFixedWidth(66)
         footer.addWidget(self.zoom)
-        layout.addLayout(footer)
+        layout.addWidget(self.footer)
         self.player = Player(self.surface, self)
         self.player.status.connect(self.set_state)
         self.player.metrics.connect(self._metrics)
         self.zoom.currentIndexChanged.connect(lambda: self.player.set_zoom(self.zoom.currentData()))
+
+    def set_immersive(self, enabled):
+        self.immersive = enabled
+        for widget in (self.header, self.state, self.footer):
+            widget.setVisible(not enabled)
+        self.layout().setContentsMargins(*(0, 0, 0, 0) if enabled else (8, 7, 8, 7))
+        self.layout().setSpacing(0 if enabled else 5)
+        self.setMinimumSize(0, 0) if enabled else self.setMinimumSize(240, 210)
+        self.surface.setMinimumSize(0, 0) if enabled else self.surface.setMinimumSize(180, 120)
+        self.setProperty("immersive", enabled)
+        # Reapply the stylesheet so QFrame recalculates its content rectangle,
+        # including the former one-pixel border inset.
+        self.setStyleSheet("QFrame#Tile { border: 0px; border-radius: 0px; padding: 0px; margin: 0px; }"
+                           if enabled else "")
+        self.player.set_fill_surface(enabled)
 
     def set_state(self, text):
         self.state.setText(text)

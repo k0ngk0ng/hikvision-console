@@ -24,11 +24,14 @@ class LivePage(QWidget):
         self.focused = None
         self.page = 0
         self.last_metrics = {}
+        self.immersive = False
         self.rotation = QTimer(self)
         self.rotation.timeout.connect(self.next_page)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 16)
-        top = QHBoxLayout()
+        self.toolbar = QWidget()
+        top = QHBoxLayout(self.toolbar)
+        top.setContentsMargins(0, 0, 0, 0)
         top.addWidget(label("实时监控", "PageTitle"))
         top.addStretch()
         self.rotate = button("轮巡", self.toggle_rotation)
@@ -49,7 +52,7 @@ class LivePage(QWidget):
         top.addWidget(self.layout_combo)
         self.toggle = button("开始预览", self.toggle_preview, True)
         top.addWidget(self.toggle)
-        layout.addLayout(top)
+        layout.addWidget(self.toolbar)
         self.info = label("连接录像机后选择通道。预览默认使用子码流，放大时切换高清。", "Muted")
         self.info.setWordWrap(True)
         layout.addWidget(self.info)
@@ -58,7 +61,9 @@ class LivePage(QWidget):
         self.grid.setContentsMargins(0, 10, 0, 5)
         self.grid.setSpacing(10)
         layout.addWidget(self.grid_container, 1)
-        footer = QHBoxLayout()
+        self.footer = QWidget()
+        footer = QHBoxLayout(self.footer)
+        footer.setContentsMargins(0, 0, 0, 0)
         self.previous = button("← 上一页", self.previous_page)
         self.next = button("下一页 →", self.next_page)
         self.page_label = label("—", "Muted")
@@ -71,7 +76,18 @@ class LivePage(QWidget):
         footer.addWidget(self.return_grid)
         self.traffic = label("媒体接收 — Mbps", "Accent")
         footer.addWidget(self.traffic)
-        layout.addLayout(footer)
+        layout.addWidget(self.footer)
+
+    def set_immersive(self, enabled):
+        self.immersive = enabled
+        for widget in (self.toolbar, self.info, self.footer):
+            widget.setVisible(not enabled)
+        self.layout().setContentsMargins(*(0, 0, 0, 0) if enabled else (24, 20, 24, 16))
+        self.layout().setSpacing(0 if enabled else -1)
+        self.grid.setContentsMargins(*(0, 0, 0, 0) if enabled else (0, 10, 0, 5))
+        self.grid.setSpacing(0 if enabled else 10)
+        for tile in self.tiles.values():
+            tile.set_immersive(enabled)
 
     def set_device(self, connection, device):
         self.stop_all()
@@ -128,6 +144,7 @@ class LivePage(QWidget):
             self.grid.setRowStretch(i, 1 if i < columns else 0)
         for index, channel in enumerate(self.visible_channels()):
             tile = VideoTile(channel, self.settings)
+            tile.set_immersive(self.immersive)
             tile.quality_changed.connect(self.quality_changed)
             tile.focus_requested.connect(self.focus)
             tile.mute_requested.connect(self.mute)

@@ -49,8 +49,12 @@ class PlaybackPage(QWidget):
         self.clocks = {}
         self.anchors = {}
         self.recovery_counts = {}
+        self.immersive = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 16)
+        self.toolbar = QWidget()
+        toolbar_layout = QVBoxLayout(self.toolbar)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
         head = QHBoxLayout()
         head.addWidget(label("录像回放", "PageTitle"))
         head.addStretch()
@@ -67,14 +71,16 @@ class PlaybackPage(QWidget):
         head.addWidget(self.date)
         self.search_button = button("检索录像", self.search, True)
         head.addWidget(self.search_button)
-        layout.addLayout(head)
+        toolbar_layout.addLayout(head)
         self.notice = label("选择通道和日期，查看 NVR 中已有的录像。", "Muted")
         self.notice.setWordWrap(True)
-        layout.addWidget(self.notice)
+        toolbar_layout.addWidget(self.notice)
         self.sync_label = label("", "Muted")
         self.sync_label.hide()
-        layout.addWidget(self.sync_label)
+        toolbar_layout.addWidget(self.sync_label)
+        layout.addWidget(self.toolbar)
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter = splitter
         self.video_area = QWidget()
         self.grid = QGridLayout(self.video_area)
         self.grid.setContentsMargins(0, 0, 8, 0)
@@ -93,7 +99,10 @@ class PlaybackPage(QWidget):
         layout.addWidget(splitter, 1)
         self.timeline = Timeline()
         self.timeline.seek_requested.connect(self.seek)
-        layout.addWidget(self.timeline)
+        self.footer = QWidget()
+        footer_layout = QVBoxLayout(self.footer)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.addWidget(self.timeline)
         controls = QHBoxLayout()
         self.pause_button = button("暂停", self.toggle_pause)
         controls.addWidget(self.pause_button)
@@ -115,7 +124,23 @@ class PlaybackPage(QWidget):
         self.time_label = label("—", "Accent")
         controls.addWidget(self.time_label)
         controls.addWidget(button("导出片段", self.export))
-        layout.addLayout(controls)
+        footer_layout.addLayout(controls)
+        layout.addWidget(self.footer)
+
+    def set_immersive(self, enabled):
+        if enabled and not self.immersive:
+            self.normal_splitter_sizes = self.splitter.sizes()
+        self.immersive = enabled
+        for widget in (self.toolbar, self.table, self.footer):
+            widget.setVisible(not enabled)
+        self.layout().setContentsMargins(*(0, 0, 0, 0) if enabled else (24, 20, 24, 16))
+        self.layout().setSpacing(0 if enabled else -1)
+        self.grid.setContentsMargins(*(0, 0, 0, 0) if enabled else (0, 0, 8, 0))
+        self.grid.setSpacing(0 if enabled else -1)
+        if not enabled and hasattr(self, "normal_splitter_sizes"):
+            self.splitter.setSizes(self.normal_splitter_sizes)
+        for tile in self.tiles.values():
+            tile.set_immersive(enabled)
 
     def set_device(self, client, device):
         self.clear_search()
@@ -173,6 +198,7 @@ class PlaybackPage(QWidget):
             if not c:
                 continue
             tile = VideoTile(c, self.settings, playback=True)
+            tile.set_immersive(self.immersive)
             tile.state.setText("等待录像检索")
             tile.metrics_changed.connect(self.metrics)
             tile.player.ended.connect(lambda cid=cid: self.on_ended(cid))

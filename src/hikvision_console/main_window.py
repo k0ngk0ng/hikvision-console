@@ -6,7 +6,7 @@ import time
 import uuid
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self.generation = 0
         self.polling = False
         self.closed = False
+        self.fullscreen_was_maximized = False
         self.setWindowTitle("Hikvision Console · 监控工作台")
         self.resize(*settings.get("window_size", [1440, 940]))
         self.setMinimumSize(1080, 730)
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
         sidebar = QWidget()
+        self.sidebar = sidebar
         sidebar.setObjectName("Sidebar")
         sidebar.setFixedWidth(240)
         left = QVBoxLayout(sidebar)
@@ -98,6 +100,7 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         header = QWidget()
+        self.header = header
         header.setObjectName("Header")
         row = QHBoxLayout(header)
         row.setContentsMargins(24, 12, 24, 12)
@@ -131,6 +134,7 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentIndex(index)
         for i, item in enumerate(self.nav):
             item.setChecked(i == index)
+        self.update_fullscreen_layout()
 
     def connect_dialog(self):
         dialog = ConnectionDialog(self.settings, self)
@@ -375,7 +379,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def export_diagnostics(self):
-        data = {"version": "0.1.0", "device": None, "profile": self.live.profile.currentData(),
+        data = {"version": "0.1.1", "device": None, "profile": self.live.profile.currentData(),
                 "transport": self.settings.get("transport", "tcp"), "metrics": self.live.last_metrics}
         if self.device:
             data["device"] = {"model": self.device.model, "firmware": self.device.firmware,
@@ -388,11 +392,29 @@ class MainWindow(QMainWindow):
         self.message.setText(f"诊断摘要已保存（不含密码、录像地址和监控画面）：{path}")
 
     def toggle_fullscreen(self):
-        self.showNormal() if self.isFullScreen() else self.showFullScreen()
+        if self.isFullScreen():
+            self.leave_fullscreen()
+        else:
+            self.showFullScreen()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange and hasattr(self, "message"):
+            if self.isFullScreen() and not event.oldState() & Qt.WindowState.WindowFullScreen:
+                self.fullscreen_was_maximized = bool(event.oldState() & Qt.WindowState.WindowMaximized)
+            self.update_fullscreen_layout()
+
+    def update_fullscreen_layout(self):
+        immersive = self.isFullScreen() and self.pages.currentWidget() in (self.live, self.playback)
+        for widget in (self.sidebar, self.header, self.message):
+            widget.setVisible(not immersive)
+        self.setMinimumSize(0, 0) if immersive else self.setMinimumSize(1080, 730)
+        self.live.set_immersive(immersive)
+        self.playback.set_immersive(immersive)
 
     def leave_fullscreen(self):
         if self.isFullScreen():
-            self.showNormal()
+            self.showMaximized() if self.fullscreen_was_maximized else self.showNormal()
         elif self.live.focused is not None:
             self.live.focus(None)
 

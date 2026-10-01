@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QTimer, Signal
 
 from .models import PROFILES
 
@@ -111,10 +111,26 @@ class Player(QObject):
         self.muted = True
         self.speed = 1.0
         self.zoom = 1.0
+        self.fill_surface = False
         self.retiring = []
         self.timer = QTimer(self)
         self.timer.setInterval(1000)
         self.timer.timeout.connect(self._tick)
+        self.surface.installEventFilter(self)
+
+    def set_fill_surface(self, enabled):
+        self.fill_surface = enabled
+        self.apply_surface_aspect()
+
+    def apply_surface_aspect(self):
+        if self.player:
+            ratio = f"{self.surface.width()}:{self.surface.height()}" if self.fill_surface else None
+            self.player.video_set_aspect_ratio(ratio)
+
+    def eventFilter(self, watched, event):
+        if watched is self.surface and event.type() == QEvent.Type.Resize and self.fill_surface:
+            self.apply_surface_aspect()
+        return super().eventFilter(watched, event)
 
     def start(self, url, *, live=True, profile="balanced", hardware=True, transport="tcp"):
         self.stop()
@@ -163,6 +179,7 @@ class Player(QObject):
             self.player.set_xwindow(handle)
         self.player.video_set_mouse_input(False)
         self.player.video_set_key_input(False)
+        self.apply_surface_aspect()
         self.player.audio_set_mute(self.muted)
         self.last_frame = self.last_bytes = 0
         self.last_tick = self.last_activity = self.started_at = time.monotonic()
@@ -262,6 +279,7 @@ class Player(QObject):
                 self.playing.emit()
                 self.player.audio_set_mute(self.muted)
                 self.set_zoom(self.zoom)
+                self.apply_surface_aspect()
                 if self.speed != 1:
                     self.player.set_rate(self.speed)
             self.status.emit("实时播放" if self.live else ("已暂停" if self.paused else "录像回放"))
