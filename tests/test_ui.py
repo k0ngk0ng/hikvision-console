@@ -116,6 +116,26 @@ def test_nine_tiles_do_not_clip_controls_on_small_window(qtbot, tmp_path, device
     window.close()
 
 
+def test_retiring_native_tile_cannot_toggle_focus_from_queued_double_click(qtbot, tmp_path, device):
+    window = MainWindow(Settings(tmp_path))
+    qtbot.addWidget(window)
+    window.live.set_device(Connection("nvr"), device)
+    window.show()
+    old = window.live.tiles[2]
+    stopped = [False]
+    old.player.retiring.append(SimpleNamespace(is_alive=lambda: not stopped[0]))
+    # The OS handler switches first, then Qt delivers the same gesture to the
+    # detached old tile while its native player is still retiring.
+    old.surface.double_clicked.emit()
+    window.live.focus(2)
+    qtbot.wait(30)
+    assert window.live.focused == 2
+    assert list(window.live.tiles) == [2]
+    stopped[0] = True
+    qtbot.wait(110)
+    window.close()
+
+
 def test_preview_button_has_immediate_feedback(qtbot, tmp_path, device):
     window = MainWindow(Settings(tmp_path))
     qtbot.addWidget(window)

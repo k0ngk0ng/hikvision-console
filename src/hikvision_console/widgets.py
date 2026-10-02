@@ -143,6 +143,7 @@ class VideoTile(QFrame):
     def __init__(self, channel, settings, parent=None, playback=False):
         super().__init__(parent)
         self.channel, self.settings = channel, settings
+        self.disposed = False
         self.immersive = False
         self.setObjectName("Tile")
         self.setAcceptDrops(not playback)
@@ -217,6 +218,11 @@ class VideoTile(QFrame):
         self.zoom.currentIndexChanged.connect(lambda: self.player.set_zoom(self.zoom.currentData()))
 
     def focus_from_surface(self):
+        # A native click may rebuild the grid before Qt delivers its queued
+        # double-click. Retired tiles are detached while VLC stops, so their
+        # window() no longer points at MainWindow; discard that stale gesture.
+        if self.disposed:
+            return
         # Windows native video children may consume Qt double-click events. Native
         # input owns the gesture there, avoiding duplicate toggles when both arrive.
         window = self.window()
@@ -285,6 +291,7 @@ class VideoTile(QFrame):
 
     def dispose(self):
         """Keep the native render surface alive until VLC's asynchronous stop completes."""
+        self.disposed = True
         self.stop()
         self.hide()
         self.setParent(None)
