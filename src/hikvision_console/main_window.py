@@ -9,7 +9,6 @@ from datetime import datetime
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication,
     QComboBox,
     QDialog,
     QGridLayout,
@@ -138,7 +137,6 @@ class MainWindow(QMainWindow):
         self.updater = UpdateController(self)
         from .windows_input import VideoMouseInput
         self.video_mouse = VideoMouseInput(self)
-        QApplication.instance().installNativeEventFilter(self.video_mouse)
 
     def navigate(self, index):
         self.pages.setCurrentIndex(index)
@@ -438,7 +436,6 @@ class MainWindow(QMainWindow):
                 return
         self.closed = True
         self.video_mouse.close()
-        QApplication.instance().removeNativeEventFilter(self.video_mouse)
         self.updater.cancel.set()
         self.generation += 1
         self.health_timer.stop()

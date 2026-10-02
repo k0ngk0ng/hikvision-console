@@ -221,13 +221,16 @@ def run_interaction(app, path: Path, directory: Path):
             if not tile.player.want_play:
                 tile.player.start(path.resolve().as_uri(), hardware=False)
     window.live.reconcile = reconcile
-    result = {"passed": False, "raw_input_registered": window.video_mouse.registered}
+    result = {"passed": False, "native_mouse_registered": window.video_mouse.registered}
     phase = [0]
     started = time.monotonic()
 
     def finish():
         timer.stop()
-        result["passed"] = all(result.get(key) for key in ("raw_input_registered", "focused", "returned", "normal_controls"))
+        result.update(click_count=window.video_mouse.click_count, focused_channel=window.live.focused,
+                      tile_count=len(window.live.tiles))
+        window.grab().save(str(directory / "interaction.png"))
+        result["passed"] = all(result.get(key) for key in ("native_mouse_registered", "focused", "returned", "normal_controls"))
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "interaction-smoke.json").write_text(json.dumps(result, indent=2))
         window.close()

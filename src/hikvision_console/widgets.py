@@ -217,7 +217,7 @@ class VideoTile(QFrame):
         self.zoom.currentIndexChanged.connect(lambda: self.player.set_zoom(self.zoom.currentData()))
 
     def focus_from_surface(self):
-        # Windows native video children may consume Qt double-click events. Raw
+        # Windows native video children may consume Qt double-click events. Native
         # input owns the gesture there, avoiding duplicate toggles when both arrive.
         window = self.window()
         if getattr(window, "video_mouse", None) and window.video_mouse.registered:
