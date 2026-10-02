@@ -14,8 +14,10 @@ from PySide6.QtWidgets import (
     QDialog,
     QGridLayout,
     QHBoxLayout,
+    QLayout,
     QMainWindow,
     QMessageBox,
+    QScrollArea,
     QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -56,10 +58,13 @@ class MainWindow(QMainWindow):
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
         sidebar = QWidget()
-        self.sidebar = sidebar
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(240)
+        self.sidebar = QScrollArea()
+        self.sidebar.setFixedWidth(240)
+        self.sidebar.setWidgetResizable(True)
+        self.sidebar.setWidget(sidebar)
         left = QVBoxLayout(sidebar)
+        left.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         left.setContentsMargins(18, 25, 18, 18)
         left.setSpacing(12)
         left.addWidget(label("HIK / CONSOLE", "Brand"))
@@ -99,7 +104,7 @@ class MainWindow(QMainWindow):
         self.update_button = button("软件更新", lambda: self.updater.show())
         left.addWidget(self.update_button)
         left.addWidget(button("导出诊断摘要", self.export_diagnostics))
-        shell.addWidget(sidebar)
+        shell.addWidget(self.sidebar)
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)

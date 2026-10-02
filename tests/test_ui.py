@@ -155,6 +155,19 @@ def test_preview_button_has_immediate_feedback(qtbot, tmp_path, device):
     window.close()
 
 
+def test_sidebar_does_not_compress_navigation_at_minimum_height(qtbot, tmp_path):
+    from hikvision_console.ui_style import STYLE
+    window = MainWindow(Settings(tmp_path))
+    window.setStyleSheet(STYLE)
+    qtbot.addWidget(window)
+    window.resize(960, 600)
+    window.show()
+    qtbot.wait(30)
+    assert all(b.height() >= b.minimumSizeHint().height() for b in window.nav)
+    assert window.sidebar.verticalScrollBar().maximum() > 0
+    window.close()
+
+
 def test_export_dialog_preserves_device_timezone(qtbot, device):
     start = device.time
     bounds = (start.replace(hour=0), start.replace(hour=0)+timedelta(days=1))

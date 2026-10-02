@@ -236,7 +236,8 @@ def run_interaction(app, path: Path, directory: Path):
         result["tiles"] = {cid: tile.surface.geometry().getRect() for cid, tile in window.live.tiles.items()}
         window.grab().save(str(directory / "interaction.png"))
         window.screen().grabWindow(0).save(str(directory / "interaction-desktop.png"))
-        result["passed"] = all(result.get(key) for key in ("native_mouse_registered", "focused", "returned", "normal_controls"))
+        result["passed"] = all(result.get(key) for key in ("native_mouse_registered", "focused", "returned",
+                                                         "normal_controls", "navigation_controls"))
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "interaction-smoke.json").write_text(json.dumps(result, indent=2))
         window.close()
@@ -259,6 +260,7 @@ def run_interaction(app, path: Path, directory: Path):
             window.leave_fullscreen()
             phase[0] = 3
         elif phase[0] == 3:
+            result["navigation_controls"] = all(b.height() >= b.minimumSizeHint().height() for b in window.nav)
             result["normal_controls"] = all(tile.footer.isVisible()
                                               and tile.footer.height() >= tile.footer.minimumSizeHint().height()
                                               for tile in window.live.tiles.values())
