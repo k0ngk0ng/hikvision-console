@@ -11,9 +11,11 @@ def main():
     parser.add_argument("--connect", action="store_true", help="使用环境变量和本地 .nvrpass 连接设备")
     parser.add_argument("--host", default=None)
     parser.add_argument("--demo", action="store_true", help="离线演示布局，不连接设备")
+    parser.add_argument("--demo-video", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--smoke-seconds", type=int, default=0, help=argparse.SUPPRESS)
     parser.add_argument("--self-test", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--component-test", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--interaction-test", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     # Qt/libVLC use X11 handles on Linux; xcb also works through XWayland.
     if sys.platform.startswith("linux"):
@@ -42,6 +44,9 @@ def main():
         from PySide6.QtCore import QStandardPaths
         os.environ["HIKVISION_HOME"] = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
     settings = Settings()
+    if args.interaction_test:
+        from .self_test import run_interaction
+        return run_interaction(app, args.interaction_test, settings.directory / "self-test")
     if args.component_test:
         from .self_test import run_components
         return run_components(app, args.component_test, settings.directory / "self-test")
@@ -50,7 +55,9 @@ def main():
         return run(app, args.self_test, settings.directory / "self-test")
     window = MainWindow(settings)
     window.show()
-    if args.demo:
+    if not args.demo and not args.demo_video and not args.smoke_seconds:
+        window.updater.start()
+    if args.demo or args.demo_video:
         channels = [Channel(i, f"摄像头 {i:02d}", i <= 6, i <= 6, "在线" if i <= 6 else "未接入",
                             {"main": Stream(str(i*100+1), "H.265", 1920, 1080, 2048, 25),
                              "sub": Stream(str(i*100+2), "H.265", 640, 360, 512, 25)}) for i in range(1, 9)]
@@ -62,6 +69,15 @@ def main():
         window.populate_channels()
         window.device_label.setText("●  离线演示 · 不连接真实设备")
         window.live.toggle.setEnabled(False)
+        if args.demo_video:
+            def reconcile_demo():
+                for cid, tile in window.live.tiles.items():
+                    if not window.live.enabled or not window.live.isVisible():
+                        tile.stop()
+                    elif tile.channel.online and not tile.player.want_play:
+                        tile.player.start(args.demo_video.resolve().as_uri(), hardware=False)
+            window.live.reconcile = reconcile_demo
+            window.live.toggle.setEnabled(True)
     elif args.connect:
         password = os.environ.get("NVR_PASSWORD", "")
         password_file = Path(".nvrpass")

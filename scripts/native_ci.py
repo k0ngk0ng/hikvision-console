@@ -40,5 +40,13 @@ report_name = "component-smoke.json" if args.components_only else "native-smoke.
 subprocess.run(command + [test_option, str(video)], env=environment, check=True, timeout=30)
 result = json.loads((directory / "self-test" / report_name).read_text())
 assert result["passed"], result
+if sys.platform == "win32" and args.frozen and not args.components_only:
+    subprocess.run(command + ["--interaction-test", str(video)], env=dict(environment, QT_SCALE_FACTOR="1.25"),
+                   check=True, timeout=40)
+    interaction = json.loads((directory / "self-test/interaction-smoke.json").read_text())
+    assert interaction["passed"], interaction
+    result["fullscreen_interaction"] = interaction
+    (directory / "self-test" / report_name).write_text(json.dumps(result, indent=2))
+    print("Windows native fullscreen double-click and restored controls: PASS")
 print("Components: PASS; native rendering NOT TESTED" if args.components_only
       else "Native rendering, pause, speed, crop and snapshot: PASS")

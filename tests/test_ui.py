@@ -91,6 +91,50 @@ def test_fullscreen_double_click_focus_and_return_to_same_page(qtbot, tmp_path, 
     window.close()
 
 
+def test_nine_tiles_do_not_clip_controls_on_small_window(qtbot, tmp_path, device):
+    from hikvision_console.ui_style import STYLE
+    window = MainWindow(Settings(tmp_path))
+    window.setStyleSheet(STYLE)
+    qtbot.addWidget(window)
+    window.live.set_device(Connection("nvr"), device)
+    window.resize(1100, 700)
+    window.show()
+    qtbot.wait(30)
+    for tile in window.live.tiles.values():
+        assert tile.footer.height() >= tile.footer.minimumSizeHint().height()
+        assert tile.rect().contains(tile.footer.geometry())
+        for control in (tile.snap, tile.mute, tile.zoom):
+            assert tile.footer.rect().contains(control.geometry())
+    assert window.live.scroll.verticalScrollBar().maximum() > 0
+    window.toggle_fullscreen()
+    qtbot.wait(30)
+    assert window.live.scroll.verticalScrollBar().isVisible() is False
+    assert all(t.surface.geometry() == t.rect() for t in window.live.tiles.values())
+    window.leave_fullscreen()
+    qtbot.wait(30)
+    assert all(t.footer.height() >= t.footer.minimumSizeHint().height() for t in window.live.tiles.values())
+    window.close()
+
+
+def test_preview_button_has_immediate_feedback(qtbot, tmp_path, device):
+    window = MainWindow(Settings(tmp_path))
+    qtbot.addWidget(window)
+    window.live.set_device(Connection("nvr"), device)
+    # Keep this behavioral check independent of any NVR/network.
+    window.live.reconcile = lambda: None
+    window.live.toggle_preview()
+    assert window.live.toggle.isChecked()
+    assert not window.live.toggle.isEnabled()
+    assert "启动" in window.live.toggle.text()
+    qtbot.waitUntil(window.live.toggle.isEnabled)
+    window.live.toggle_preview()
+    assert not window.live.toggle.isChecked()
+    assert not window.live.toggle.isEnabled()
+    qtbot.waitUntil(window.live.toggle.isEnabled)
+    assert window.live.toggle.text() == "开始预览"
+    window.close()
+
+
 def test_export_dialog_preserves_device_timezone(qtbot, device):
     start = device.time
     bounds = (start.replace(hour=0), start.replace(hour=0)+timedelta(days=1))

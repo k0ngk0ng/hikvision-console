@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
@@ -38,18 +39,58 @@ def windows_double_click(surface):
     import ctypes
 
     from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QCursor
 
     user = ctypes.windll.user32
     user.SetForegroundWindow.argtypes = [ctypes.c_void_p]
-    user.SetForegroundWindow(int(surface.winId()))
+    user.SetForegroundWindow(int(surface.window().winId()))
     point = surface.mapToGlobal(QPoint(surface.width() // 2, surface.height() // 2))
-    user.SetCursorPos(point.x(), point.y())
+    QCursor.setPos(point)
 
     def click():
         user.mouse_event(0x0002, 0, 0, 0, 0)
         user.mouse_event(0x0004, 0, 0, 0, 0)
     click()
     QTimer.singleShot(80, click)
+
+
+def windows_ffmpeg_checks(path):
+    """Use the shipped FFmpeg itself, without suppression flags, from the GUI EXE."""
+    import ctypes
+    import struct
+
+    from PySide6.QtCore import QProcess
+
+    from .exports import ffmpeg_binary
+    binary = ffmpeg_binary()
+    data = Path(binary).read_bytes()
+    pe = struct.unpack_from("<I", data, 0x3c)[0]
+    gui = struct.unpack_from("<H", data, pe + 24 + 68)[0] == 2
+    args = ["-nostdin", "-loglevel", "error", "-re", "-stream_loop", "-1", "-i", str(path), "-f", "null", "-"]
+    kernel = ctypes.windll.kernel32
+    results = {"ffmpeg_gui_subsystem": gui}
+    assert not kernel.GetConsoleWindow(), "Run console verification from the frozen GUI app"
+    # Default subprocess and QProcess launches previously were not covered by tests.
+    with subprocess.Popen([binary, *args], stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+        time.sleep(0.3)
+        attached = bool(kernel.AttachConsole(child.pid))
+        if attached:
+            kernel.FreeConsole()
+        results["ffmpeg_popen_no_console"] = not attached and child.poll() is None
+        child.terminate()
+        child.communicate(timeout=5)
+    child = QProcess()
+    child.start(binary, args)
+    started = child.waitForStarted(5000)
+    child.waitForReadyRead(300)
+    attached = bool(kernel.AttachConsole(int(child.processId()))) if started else False
+    if attached:
+        kernel.FreeConsole()
+    results["ffmpeg_qprocess_no_console"] = started and not attached
+    child.kill()
+    child.waitForFinished(5000)
+    return results
 
 
 def run_components(app, path: Path, directory: Path):
@@ -96,6 +137,8 @@ def run(app, path: Path, directory: Path):
               "frames": 0, "pause": False, "rate": False, "snapshot": False, "native_vout": False}
     if sys.platform == "win32":
         result.update(windows_desktop_checks(surface), native_double_click=False)
+        if getattr(sys, "frozen", False):
+            result.update(windows_ffmpeg_checks(path))
         surface.double_clicked.connect(lambda: result.update(native_double_click=True))
     player.status.connect(lambda status: result.update(last_status=status))
     player.metrics.connect(lambda data: result.update(frames=max(result["frames"], data["frames"])))
@@ -135,6 +178,7 @@ def run(app, path: Path, directory: Path):
                                 and result["snapshot"] and result["native_vout"])
         if sys.platform == "win32":
             result["passed"] &= all(result[key] for key in ("taskbar_identity", "window_icon", "native_double_click"))
+            result["passed"] &= all(value for key, value in result.items() if key.startswith("ffmpeg_"))
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "native-smoke.json").write_text(json.dumps(result, indent=2))
         print(json.dumps(result), flush=True)
@@ -153,3 +197,67 @@ def run(app, path: Path, directory: Path):
     app.exec()
     shutdown_vlc()
     return 0 if result.get("passed") else 1
+
+
+def run_interaction(app, path: Path, directory: Path):
+    """Exercise the actual fullscreen grid and native children using Windows mouse input."""
+    from datetime import datetime, timezone
+
+    from .main_window import MainWindow
+    from .models import Channel, Connection, Device
+    from .storage import Settings
+
+    settings = Settings(directory / "settings")
+    settings.update(grid_size=4)
+    window = MainWindow(settings)
+    window.show()
+    device = Device("Synthetic", "CI", [Channel(i, f"Camera {i}", True, True, "在线") for i in range(1, 5)],
+                    datetime.now(timezone.utc))
+    window.live.set_device(Connection("demo.invalid"), device)
+    window.live.enabled = True
+
+    def reconcile():
+        for tile in window.live.tiles.values():
+            if not tile.player.want_play:
+                tile.player.start(path.resolve().as_uri(), hardware=False)
+    window.live.reconcile = reconcile
+    result = {"passed": False, "raw_input_registered": window.video_mouse.registered}
+    phase = [0]
+    started = time.monotonic()
+
+    def finish():
+        timer.stop()
+        result["passed"] = all(result.get(key) for key in ("raw_input_registered", "focused", "returned", "normal_controls"))
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "interaction-smoke.json").write_text(json.dumps(result, indent=2))
+        window.close()
+
+    def poll():
+        if time.monotonic() - started > 25:
+            result["phase"] = phase[0]
+            finish()
+            return
+        if phase[0] == 0 and all(tile.player.has_played for tile in window.live.tiles.values()):
+            window.toggle_fullscreen()
+            phase[0] = 1
+            QTimer.singleShot(800, lambda: windows_double_click(window.live.tiles[2].surface))
+        elif phase[0] == 1 and window.live.focused == 2 and window.live.tiles[2].player.has_played:
+            result["focused"] = window.isFullScreen() and len(window.live.tiles) == 1
+            phase[0] = 2
+            QTimer.singleShot(800, lambda: windows_double_click(window.live.tiles[2].surface))
+        elif phase[0] == 2 and window.live.focused is None and len(window.live.tiles) == 4:
+            result["returned"] = window.isFullScreen()
+            window.leave_fullscreen()
+            phase[0] = 3
+        elif phase[0] == 3:
+            result["normal_controls"] = all(tile.footer.isVisible()
+                                              and tile.footer.height() >= tile.footer.minimumSizeHint().height()
+                                              for tile in window.live.tiles.values())
+            finish()
+    timer = QTimer()
+    timer.timeout.connect(poll)
+    timer.start(200)
+    QTimer.singleShot(300, reconcile)
+    app.exec()
+    shutdown_vlc()
+    return 0 if result["passed"] else 1

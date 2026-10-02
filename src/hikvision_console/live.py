@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QTimer, Signal
-from PySide6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QLayout, QScrollArea, QVBoxLayout, QWidget
 
 from .models import PROFILES, plan_streams
 from .widgets import VideoTile, button, label
@@ -51,6 +51,10 @@ class LivePage(QWidget):
         self.layout_combo.currentIndexChanged.connect(self.layout_changed)
         top.addWidget(self.layout_combo)
         self.toggle = button("开始预览", self.toggle_preview, True)
+        self.toggle.setCheckable(True)
+        self.preview_feedback = QTimer(self)
+        self.preview_feedback.setSingleShot(True)
+        self.preview_feedback.timeout.connect(self.finish_preview_feedback)
         top.addWidget(self.toggle)
         layout.addWidget(self.toolbar)
         self.info = label("连接录像机后选择通道。预览默认使用子码流，放大时切换高清。", "Muted")
@@ -58,9 +62,13 @@ class LivePage(QWidget):
         layout.addWidget(self.info)
         self.grid_container = QWidget()
         self.grid = QGridLayout(self.grid_container)
+        self.grid.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.grid.setContentsMargins(0, 10, 0, 5)
         self.grid.setSpacing(10)
-        layout.addWidget(self.grid_container, 1)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setWidget(self.grid_container)
+        layout.addWidget(self.scroll, 1)
         self.footer = QWidget()
         footer = QHBoxLayout(self.footer)
         footer.setContentsMargins(0, 0, 0, 0)
@@ -86,6 +94,9 @@ class LivePage(QWidget):
         self.layout().setSpacing(0 if enabled else -1)
         self.grid.setContentsMargins(*(0, 0, 0, 0) if enabled else (0, 10, 0, 5))
         self.grid.setSpacing(0 if enabled else 10)
+        policy = Qt.ScrollBarPolicy.ScrollBarAlwaysOff if enabled else Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        self.scroll.setHorizontalScrollBarPolicy(policy)
+        self.scroll.setVerticalScrollBarPolicy(policy)
         for tile in self.tiles.values():
             tile.set_immersive(enabled)
 
@@ -112,8 +123,16 @@ class LivePage(QWidget):
 
     def toggle_preview(self):
         self.enabled = not self.enabled
-        self.toggle.setText("停止预览" if self.enabled else "开始预览")
+        self.toggle.setChecked(self.enabled)
+        self.toggle.setText("正在启动…" if self.enabled else "正在停止…")
+        self.toggle.setEnabled(False)
+        self.preview_feedback.start(300)
         self.reconcile()
+
+    def finish_preview_feedback(self):
+        self.toggle.setEnabled(self.connection is not None)
+        self.toggle.setText("连接中 · 停止预览" if self.enabled else "开始预览")
+        self.toggle.setChecked(self.enabled)
 
     def profile_changed(self):
         self.settings.update(profile=self.profile.currentData())
@@ -221,6 +240,8 @@ class LivePage(QWidget):
 
     def metrics(self, channel_id, data):
         self.last_metrics[channel_id] = data
+        if self.enabled and data.get("frames", 0) > 0 and not self.preview_feedback.isActive():
+            self.toggle.setText("预览中 · 停止预览")
         total = sum(self.last_metrics.get(i, {}).get("kbps", 0) for i in self.active)
         self.traffic.setText(f"媒体接收 {total/1000:.2f} Mbps")
 

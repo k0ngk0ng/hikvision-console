@@ -9,6 +9,7 @@ from datetime import datetime
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QGridLayout,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
 from .api import NvrClient
 from .events import EventsPage
 from .exports import ExportDialog, ExportJob, ExportManager, ExportsPage
@@ -43,9 +45,9 @@ class MainWindow(QMainWindow):
         self.polling = False
         self.closed = False
         self.fullscreen_was_maximized = False
-        self.setWindowTitle("Hikvision Console · 监控工作台")
+        self.setWindowTitle(f"Hikvision Console v{__version__} · 监控工作台")
         self.resize(*settings.get("window_size", [1440, 940]))
-        self.setMinimumSize(1080, 730)
+        self.setMinimumSize(960, 600)
         self.tasks = TaskPool(self)
         self.exports = ExportManager(self)
         root = QWidget()
@@ -62,6 +64,7 @@ class MainWindow(QMainWindow):
         left.setSpacing(12)
         left.addWidget(label("HIK / CONSOLE", "Brand"))
         left.addWidget(label("DIRECT • PRIVATE • DESKTOP", "Subtitle"))
+        left.addWidget(label(f"v{__version__}", "Subtitle"))
         left.addSpacing(15)
         self.nav = []
         self.pages = QStackedWidget()
@@ -93,6 +96,8 @@ class MainWindow(QMainWindow):
         left.addWidget(self.count_label)
         left.addWidget(button("云台控制", self.ptz_dialog))
         left.addWidget(button("客户端设置", self.open_settings))
+        self.update_button = button("软件更新", lambda: self.updater.show())
+        left.addWidget(self.update_button)
         left.addWidget(button("导出诊断摘要", self.export_diagnostics))
         shell.addWidget(sidebar)
         right = QWidget()
@@ -129,6 +134,11 @@ class MainWindow(QMainWindow):
         escape.triggered.connect(self.leave_fullscreen)
         self.addAction(escape)
         self.navigate(0)
+        from .update_ui import UpdateController
+        self.updater = UpdateController(self)
+        from .windows_input import VideoMouseInput
+        self.video_mouse = VideoMouseInput(self)
+        QApplication.instance().installNativeEventFilter(self.video_mouse)
 
     def navigate(self, index):
         self.pages.setCurrentIndex(index)
@@ -149,6 +159,8 @@ class MainWindow(QMainWindow):
         self.live.connection = None
         self.live.channels = []
         self.live.enabled = False
+        self.live.preview_feedback.stop()
+        self.live.toggle.setChecked(False)
         self.live.toggle.setText("开始预览")
         self.live.toggle.setEnabled(False)
         self.live.rebuild()
@@ -379,7 +391,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def export_diagnostics(self):
-        data = {"version": "0.1.2", "device": None, "profile": self.live.profile.currentData(),
+        data = {"version": "0.1.3", "device": None, "profile": self.live.profile.currentData(),
                 "transport": self.settings.get("transport", "tcp"), "metrics": self.live.last_metrics}
         if self.device:
             data["device"] = {"model": self.device.model, "firmware": self.device.firmware,
@@ -408,7 +420,7 @@ class MainWindow(QMainWindow):
         immersive = self.isFullScreen() and self.pages.currentWidget() in (self.live, self.playback)
         for widget in (self.sidebar, self.header, self.message):
             widget.setVisible(not immersive)
-        self.setMinimumSize(0, 0) if immersive else self.setMinimumSize(1080, 730)
+        self.setMinimumSize(0, 0) if immersive else self.setMinimumSize(960, 600)
         self.live.set_immersive(immersive)
         self.playback.set_immersive(immersive)
 
@@ -425,6 +437,9 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.closed = True
+        self.video_mouse.close()
+        QApplication.instance().removeNativeEventFilter(self.video_mouse)
+        self.updater.cancel.set()
         self.generation += 1
         self.health_timer.stop()
         self.live.stop_all()

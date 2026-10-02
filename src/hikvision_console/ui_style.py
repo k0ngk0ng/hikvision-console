@@ -18,8 +18,12 @@ QPushButton:checked { background: #16463e; border-color: #37bda0; color: #8ff0da
 QPushButton:disabled { color: #506079; background: #141c28; border-color: #202c3b; }
 QPushButton#Primary { background: #38c9a7; color: #06251e; border: none; font-weight: 650; }
 QPushButton#Primary:hover { background: #67ddc1; }
+QPushButton#Primary:checked { background: #16463e; color: #8ff0da; border: 1px solid #37bda0; }
+QPushButton#Primary:pressed { background: #147961; color: #ffffff; border: 1px solid #99ffe2; }
+QPushButton#Primary:disabled { background: #253c38; color: #809d96; border: 1px solid #3b544e; }
 QPushButton#Nav { text-align: left; padding: 12px 14px; border: none; background: transparent; }
 QPushButton#Nav:checked { background: #203b3b; color: #7ae4cb; }
+QPushButton#Nav:pressed { background: #315b55; color: #ffffff; }
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit, QTimeEdit, QDateTimeEdit {
  background: #131e2b; border: 1px solid #304057; border-radius: 5px; padding: 6px; selection-background-color: #286c62;
 }

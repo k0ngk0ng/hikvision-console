@@ -22,4 +22,9 @@ def icon_path():
 def subprocess_options():
     # A windowed PyInstaller parent does not suppress console windows created by
     # its console-subsystem children. Apply this on every start, including retries.
-    return {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+    if sys.platform != "win32":
+        return {}
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = subprocess.SW_HIDE
+    return {"creationflags": subprocess.CREATE_NO_WINDOW, "startupinfo": startup}

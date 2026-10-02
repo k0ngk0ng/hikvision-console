@@ -13,9 +13,11 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -144,11 +146,12 @@ class VideoTile(QFrame):
         self.immersive = False
         self.setObjectName("Tile")
         self.setAcceptDrops(not playback)
-        self.setMinimumSize(240, 210)
         layout = QVBoxLayout(self)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setContentsMargins(8, 7, 8, 7)
         layout.setSpacing(5)
         self.header = QWidget()
+        self.header.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         header = QHBoxLayout(self.header)
         header.setContentsMargins(0, 0, 0, 0)
         self.title = DragTitle(f"{channel.id:02d}  {channel.name}", channel.id)
@@ -172,7 +175,7 @@ class VideoTile(QFrame):
         self.surface = VideoSurface()
         self.surface.setObjectName("VideoSurface")
         self.surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
-        self.surface.setMinimumSize(180, 120)
+        self.surface.setMinimumSize(180, 64)
         if not playback:
             # Rebuilding the grid can retire this native surface; wait until the
             # mouse event has returned before switching to the selected channel.
@@ -181,12 +184,19 @@ class VideoTile(QFrame):
         self.state = label("等待连接" if channel.online else channel.status, "Muted")
         self.state.setWordWrap(True)
         self.state.setMaximumHeight(38)
-        layout.addWidget(self.state)
+        self.status_row = QWidget()
+        self.status_row.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        status_layout = QHBoxLayout(self.status_row)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.addWidget(self.state, 1)
+        self.stats = label("— fps  ·  — kbps", "Subtitle")
+        status_layout.addWidget(self.stats)
+        layout.addWidget(self.status_row)
         self.footer = QWidget()
+        self.footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         footer = QHBoxLayout(self.footer)
         footer.setContentsMargins(0, 0, 0, 0)
-        self.stats = label("— fps  ·  — kbps", "Subtitle")
-        footer.addWidget(self.stats, 1)
+        footer.addStretch()
         self.mute = button("静音")
         self.mute.setCheckable(True)
         self.mute.setToolTip("仅选中的一路播放声音")
@@ -207,16 +217,21 @@ class VideoTile(QFrame):
         self.zoom.currentIndexChanged.connect(lambda: self.player.set_zoom(self.zoom.currentData()))
 
     def focus_from_surface(self):
+        # Windows native video children may consume Qt double-click events. Raw
+        # input owns the gesture there, avoiding duplicate toggles when both arrive.
+        window = self.window()
+        if getattr(window, "video_mouse", None) and window.video_mouse.registered:
+            window.video_mouse.request_focus(self)
+            return
         self.focus_requested.emit(self.channel.id)
 
     def set_immersive(self, enabled):
         self.immersive = enabled
-        for widget in (self.header, self.state, self.footer):
+        for widget in (self.header, self.status_row, self.footer):
             widget.setVisible(not enabled)
         self.layout().setContentsMargins(*(0, 0, 0, 0) if enabled else (8, 7, 8, 7))
         self.layout().setSpacing(0 if enabled else 5)
-        self.setMinimumSize(0, 0) if enabled else self.setMinimumSize(240, 210)
-        self.surface.setMinimumSize(0, 0) if enabled else self.surface.setMinimumSize(180, 120)
+        self.surface.setMinimumSize(0, 0) if enabled else self.surface.setMinimumSize(180, 64)
         self.setProperty("immersive", enabled)
         # Reapply the stylesheet so QFrame recalculates its content rectangle,
         # including the former one-pixel border inset.
