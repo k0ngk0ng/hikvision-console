@@ -15,6 +15,9 @@ class VideoMouseInput(QObject):
         self.previous = None
         self.pending = None
         self.click_count = 0
+        self.hit_count = 0
+        self.focus_count = 0
+        self.apply_count = 0
         if sys.platform != "win32":
             return
         self.user = ctypes.windll.user32
@@ -70,6 +73,7 @@ class VideoMouseInput(QObject):
             self.previous = None
             return
         prior = self.previous
+        self.hit_count += 1
         self.previous = (tile, timestamp, cursor.x(), cursor.y())
         if prior and prior[0] is tile and (timestamp-prior[1]) & 0xffffffff <= self.user.GetDoubleClickTime():
             if (abs(cursor.x()-prior[2]) <= self.user.GetSystemMetrics(36) // 2
@@ -78,6 +82,7 @@ class VideoMouseInput(QObject):
                 self.request_focus(tile)
 
     def request_focus(self, tile):
+        self.focus_count += 1
         if self.pending is tile:
             return
         self.pending = tile
@@ -87,5 +92,6 @@ class VideoMouseInput(QObject):
                 self.pending = None
             page = self.window.live
             if page.tiles.get(tile.channel.id) is tile:
+                self.apply_count += 1
                 page.focus(tile.channel.id)
         QTimer.singleShot(0, apply)

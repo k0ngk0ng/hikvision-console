@@ -228,8 +228,14 @@ def run_interaction(app, path: Path, directory: Path):
     def finish():
         timer.stop()
         result.update(click_count=window.video_mouse.click_count, focused_channel=window.live.focused,
-                      tile_count=len(window.live.tiles))
+                      tile_count=len(window.live.tiles), hit_count=window.video_mouse.hit_count,
+                      focus_count=window.video_mouse.focus_count, apply_count=window.video_mouse.apply_count)
+        from PySide6.QtGui import QCursor
+        result["cursor"] = QCursor.pos().toTuple()
+        result["viewport"] = window.live.scroll.viewport().geometry().getRect()
+        result["tiles"] = {cid: tile.surface.geometry().getRect() for cid, tile in window.live.tiles.items()}
         window.grab().save(str(directory / "interaction.png"))
+        window.screen().grabWindow(0).save(str(directory / "interaction-desktop.png"))
         result["passed"] = all(result.get(key) for key in ("native_mouse_registered", "focused", "returned", "normal_controls"))
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "interaction-smoke.json").write_text(json.dumps(result, indent=2))
