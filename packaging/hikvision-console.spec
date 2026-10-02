@@ -51,4 +51,4 @@ if sys.platform == "darwin":
                  icon=str(root / "assets/icon.icns"),
                  info_plist={"NSHighResolutionCapable": True,
                              "NSLocalNetworkUsageDescription": "Connect to the NVR you configure for live monitoring and recording playback.",
-                             "CFBundleShortVersionString": "0.1.1"})
+                             "CFBundleShortVersionString": "0.1.2"})

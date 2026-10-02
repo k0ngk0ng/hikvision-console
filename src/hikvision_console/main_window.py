@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def export_diagnostics(self):
-        data = {"version": "0.1.1", "device": None, "profile": self.live.profile.currentData(),
+        data = {"version": "0.1.2", "device": None, "profile": self.live.profile.currentData(),
                 "transport": self.settings.get("transport", "tcp"), "metrics": self.live.last_metrics}
         if self.device:
             data["device"] = {"model": self.device.model, "firmware": self.device.firmware,

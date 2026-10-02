@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hikvision-console"
-version = "0.1.1"
+version = "0.1.2"
 description = "Direct-to-NVR desktop surveillance over private networks"
 license = "GPL-3.0-or-later"
 readme = "README.md"

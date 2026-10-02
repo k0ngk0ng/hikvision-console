@@ -17,12 +17,12 @@ if args.components_only and sys.platform != "darwin":
     raise SystemExit("Component-only packaging is restricted to hosted macOS builds")
 dist = root / "dist"
 system, arch = platform.system(), platform.machine().lower()
-name = f"HikvisionConsole-0.1.1-{system}-{arch}"
+name = f"HikvisionConsole-0.1.2-{system}-{arch}"
 report_name = "component-smoke.json" if args.components_only else "native-smoke.json"
 smoke = json.loads((root / ".tmp/native-ci/self-test" / report_name).read_text())
 if not smoke.get("passed"):
     raise SystemExit("Run scripts/native_ci.py --frozen successfully before packaging")
-manifest = {"version": "0.1.1", "system": system, "architecture": arch,
+manifest = {"version": "0.1.2", "system": system, "architecture": arch,
             "build_os": platform.platform(), "python": platform.python_version(),
             "native_rendering_tested": not args.components_only, "verification": smoke}
 if sys.platform == "darwin":
