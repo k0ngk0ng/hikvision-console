@@ -64,6 +64,33 @@ def test_timeline_maps_time_and_emits_seek(qtbot, device):
     assert result.args[0] == start
 
 
+def test_fullscreen_double_click_focus_and_return_to_same_page(qtbot, tmp_path, device):
+    settings = Settings(tmp_path)
+    settings.update(grid_size=4)
+    window = MainWindow(settings)
+    qtbot.addWidget(window)
+    window.live.set_device(Connection("nvr"), device)
+    window.show()
+    window.live.next_page()
+    window.toggle_fullscreen()
+    surface = window.live.tiles[5].surface
+    qtbot.mouseDClick(surface, Qt.MouseButton.RightButton)
+    assert window.live.focused is None
+    qtbot.mouseDClick(surface, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: window.live.focused == 5)
+    assert window.isFullScreen()
+    assert list(window.live.tiles) == [5]
+    assert window.live.requested[5] == "main"
+    assert window.live.tiles[5].header.isHidden()
+    qtbot.mouseDClick(window.live.tiles[5].surface, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: window.live.focused is None)
+    assert window.isFullScreen()
+    assert set(window.live.tiles) == {5, 6, 7, 8}
+    assert window.live.page == 1
+    assert window.live.requested[5] == "sub"
+    window.close()
+
+
 def test_export_dialog_preserves_device_timezone(qtbot, device):
     start = device.time
     bounds = (start.replace(hour=0), start.replace(hour=0)+timedelta(days=1))

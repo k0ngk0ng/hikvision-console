@@ -120,6 +120,17 @@ class DragTitle(QLabel):
                 self.origin = None
 
 
+class VideoSurface(QFrame):
+    double_clicked = Signal()
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.double_clicked.emit()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+
 class VideoTile(QFrame):
     quality_changed = Signal(int, str)
     focus_requested = Signal(int)
@@ -158,10 +169,14 @@ class VideoTile(QFrame):
         expand.setFixedWidth(38)
         header.addWidget(expand)
         layout.addWidget(self.header)
-        self.surface = QFrame()
+        self.surface = VideoSurface()
         self.surface.setObjectName("VideoSurface")
         self.surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
         self.surface.setMinimumSize(180, 120)
+        if not playback:
+            # Rebuilding the grid can retire this native surface; wait until the
+            # mouse event has returned before switching to the selected channel.
+            self.surface.double_clicked.connect(self.focus_from_surface, Qt.ConnectionType.QueuedConnection)
         layout.addWidget(self.surface, 1)
         self.state = label("等待连接" if channel.online else channel.status, "Muted")
         self.state.setWordWrap(True)
@@ -190,6 +205,9 @@ class VideoTile(QFrame):
         self.player.status.connect(self.set_state)
         self.player.metrics.connect(self._metrics)
         self.zoom.currentIndexChanged.connect(lambda: self.player.set_zoom(self.zoom.currentData()))
+
+    def focus_from_surface(self):
+        self.focus_requested.emit(self.channel.id)
 
     def set_immersive(self, enabled):
         self.immersive = enabled

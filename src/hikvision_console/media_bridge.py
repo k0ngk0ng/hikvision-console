@@ -14,6 +14,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+from .desktop import subprocess_options
 from .exports import ffmpeg_binary
 from .media_source import rtsp_input
 
@@ -52,7 +53,8 @@ class StreamBridge:
                         return
                     try:
                         owner.process = subprocess.Popen(owner.command(), stdout=subprocess.PIPE,
-                                                          stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+                                                          stderr=subprocess.PIPE, stdin=subprocess.PIPE,
+                                                          **subprocess_options())
                         threading.Thread(target=owner.read_errors, daemon=True, name="ingest-status").start()
                         _, payload = rtsp_input(owner.proxy.url if owner.proxy else owner.source_url,
                                                 transport="tcp" if owner.proxy else owner.transport,

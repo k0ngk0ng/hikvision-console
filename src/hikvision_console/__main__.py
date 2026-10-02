@@ -24,17 +24,18 @@ def main():
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
+    from .desktop import icon_path, prepare_desktop
     from .main_window import MainWindow
     from .models import Channel, Connection, Device, Stream
     from .player import shutdown_vlc
     from .storage import Settings
     from .ui_style import STYLE
 
+    prepare_desktop()
     app = QApplication(sys.argv[:1])
     app.setApplicationName("Hikvision Console")
     app.setOrganizationName("HikvisionConsole")
-    asset_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
-    app.setWindowIcon(QIcon(str(asset_root / "assets/icon.svg")))
+    app.setWindowIcon(QIcon(str(icon_path())))
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
     if getattr(sys, "frozen", False) and not os.environ.get("HIKVISION_HOME"):

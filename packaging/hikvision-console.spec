@@ -12,7 +12,8 @@ if not ffmpeg:
     raise RuntimeError("Install FFmpeg for the target architecture before packaging")
 binaries = [(ffmpeg, "imageio_ffmpeg/binaries")]
 datas = [(str(root / "README.md"), "."), (str(root / "LICENSE"), "."),
-         (str(root / "THIRD_PARTY.md"), "."), (str(root / "assets/icon.svg"), "assets")]
+         (str(root / "THIRD_PARTY.md"), "."), (str(root / "assets/icon.svg"), "assets"),
+         (str(root / "assets/icon.ico"), "assets")]
 if sys.platform == "darwin":
     vlc_root = Path(os.environ.get("HIKVISION_VLC_DIR", "/Applications/VLC.app/Contents/MacOS"))
     if not (vlc_root / "lib/libvlc.dylib").exists():
