@@ -42,6 +42,9 @@ QScrollArea > QWidget > QWidget { background: transparent; }
 QScrollBar:vertical { background: #101721; width: 8px; }
 QScrollBar::handle:vertical { background: #35485d; min-height: 24px; border-radius: 4px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: #101721; height: 8px; }
+QScrollBar::handle:horizontal { background: #35485d; min-width: 24px; border-radius: 4px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QGroupBox { border: 1px solid #2a3a4f; border-radius: 6px; margin-top: 12px; padding-top: 16px; }
 QGroupBox::title { subcontrol-origin: margin; left: 12px; color: #adbed2; }
 QCheckBox { spacing: 7px; }
