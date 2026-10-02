@@ -3,59 +3,68 @@ import ctypes
 import sys
 from ctypes import wintypes
 
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QAbstractNativeEventFilter, QTimer
 from PySide6.QtGui import QCursor
 
 
-class VideoMouseInput(QObject):
+class VideoMouseInput(QAbstractNativeEventFilter):
     def __init__(self, window):
-        super().__init__(window)
+        super().__init__()
         self.window = window
         self.registered = False
         self.previous = None
         self.pending = None
-        self.click_count = 0
-        self.hit_count = 0
-        self.focus_count = 0
-        self.apply_count = 0
+        self.click_count = self.hit_count = self.focus_count = self.apply_count = 0
         if sys.platform != "win32":
             return
         self.user = ctypes.windll.user32
 
+        class Device(ctypes.Structure):
+            _fields_ = [("page", wintypes.USHORT), ("usage", wintypes.USHORT),
+                        ("flags", wintypes.DWORD), ("target", wintypes.HWND)]
+
+        class Header(ctypes.Structure):
+            _fields_ = [("kind", wintypes.DWORD), ("size", wintypes.DWORD),
+                        ("device", wintypes.HANDLE), ("param", wintypes.WPARAM)]
+
+        class Mouse(ctypes.Structure):
+            _fields_ = [("flags", wintypes.USHORT), ("buttons", wintypes.ULONG),
+                        ("raw_buttons", wintypes.ULONG), ("x", wintypes.LONG),
+                        ("y", wintypes.LONG), ("extra", wintypes.ULONG)]
+        self.Device, self.Header, self.Mouse = Device, Header, Mouse
+        self.user.GetRawInputData.argtypes = [wintypes.HANDLE, wintypes.UINT, ctypes.c_void_p,
+                                              ctypes.POINTER(wintypes.UINT), wintypes.UINT]
         self.user.GetForegroundWindow.restype = wintypes.HWND
-        self.user.SetWindowsHookExW.argtypes = [ctypes.c_int, ctypes.c_void_p, wintypes.HINSTANCE, wintypes.DWORD]
-        self.user.SetWindowsHookExW.restype = wintypes.HHOOK
-        self.user.CallNextHookEx.argtypes = [wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
-        self.user.CallNextHookEx.restype = ctypes.c_ssize_t
-        self.user.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
-
-        class MouseEvent(ctypes.Structure):
-            _fields_ = [("point", wintypes.POINT), ("data", wintypes.DWORD),
-                        ("flags", wintypes.DWORD), ("time", wintypes.DWORD),
-                        ("extra", ctypes.c_size_t)]
-
-        callback_type = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
-
-        def receive(code, event, address):
-            # VLC renders into a child owned by its own native thread. A low-level
-            # callback reaches this Qt thread before that child consumes the click.
-            # Ignore every event outside our foreground window and never suppress input.
-            if code >= 0 and event == 0x0201 and self.user.GetForegroundWindow() == int(window.winId()):
-                timestamp = MouseEvent.from_address(address).time
-                self.left_down(timestamp)
-            return self.user.CallNextHookEx(None, code, event, address)
-
-        self.callback = callback_type(receive)
-        kernel = ctypes.windll.kernel32
-        kernel.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
-        kernel.GetModuleHandleW.restype = wintypes.HMODULE
-        self.hook = self.user.SetWindowsHookExW(14, self.callback, kernel.GetModuleHandleW(None), 0)  # WH_MOUSE_LL
-        self.registered = bool(self.hook)
+        # No INPUTSINK: input is delivered only while this application is foreground.
+        device = Device(1, 2, 0, int(window.winId()))
+        self.registered = bool(self.user.RegisterRawInputDevices(ctypes.byref(device), 1, ctypes.sizeof(device)))
 
     def close(self):
         if self.registered:
-            self.user.UnhookWindowsHookEx(self.hook)
+            device = self.Device(1, 2, 1, None)  # RIDEV_REMOVE
+            self.user.RegisterRawInputDevices(ctypes.byref(device), 1, ctypes.sizeof(device))
             self.registered = False
+
+    def nativeEventFilter(self, event_type, message):
+        if not self.registered:
+            return False, 0
+        msg = wintypes.MSG.from_address(int(message))
+        if msg.message != 0x00FF or self.user.GetForegroundWindow() != int(self.window.winId()):
+            return False, 0
+        size = wintypes.UINT()
+        self.user.GetRawInputData(msg.lParam, 0x10000003, None, ctypes.byref(size), ctypes.sizeof(self.Header))
+        if not 0 < size.value < 4096:
+            return False, 0
+        buffer = ctypes.create_string_buffer(size.value)
+        count = self.user.GetRawInputData(msg.lParam, 0x10000003, buffer, ctypes.byref(size), ctypes.sizeof(self.Header))
+        if count != size.value or size.value < ctypes.sizeof(self.Header) + ctypes.sizeof(self.Mouse):
+            return False, 0
+        if self.Header.from_buffer(buffer).kind != 0:
+            return False, 0
+        mouse = self.Mouse.from_buffer(buffer, ctypes.sizeof(self.Header))
+        if mouse.buttons & 1:  # RI_MOUSE_LEFT_BUTTON_DOWN
+            self.left_down(msg.time)
+        return False, 0
 
     def left_down(self, timestamp):
         self.click_count += 1
@@ -72,8 +81,8 @@ class VideoMouseInput(QObject):
         if tile is None or not page.scroll.viewport().rect().contains(page.scroll.viewport().mapFromGlobal(cursor)):
             self.previous = None
             return
-        prior = self.previous
         self.hit_count += 1
+        prior = self.previous
         self.previous = (tile, timestamp, cursor.x(), cursor.y())
         if prior and prior[0] is tile and (timestamp-prior[1]) & 0xffffffff <= self.user.GetDoubleClickTime():
             if (abs(cursor.x()-prior[2]) <= self.user.GetSystemMetrics(36) // 2
