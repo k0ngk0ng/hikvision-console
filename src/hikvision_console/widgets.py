@@ -223,7 +223,7 @@ class VideoTile(QFrame):
         # window() no longer points at MainWindow; discard that stale gesture.
         if self.disposed:
             return
-        # Windows native video children may consume Qt double-click events. Native
+        # Native video children may consume Qt double-click events. Native
         # input owns the gesture there, avoiding duplicate toggles when both arrive.
         window = self.window()
         if getattr(window, "video_mouse", None) and window.video_mouse.registered:

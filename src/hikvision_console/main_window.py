@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 import uuid
@@ -141,7 +142,10 @@ class MainWindow(QMainWindow):
         self.navigate(0)
         from .update_ui import UpdateController
         self.updater = UpdateController(self)
-        from .windows_input import VideoMouseInput
+        if sys.platform == "darwin":
+            from .macos_input import VideoMouseInput
+        else:
+            from .windows_input import VideoMouseInput
         self.video_mouse = VideoMouseInput(self)
         QApplication.instance().installNativeEventFilter(self.video_mouse)
 
