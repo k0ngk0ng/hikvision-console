@@ -27,6 +27,13 @@ class LivePage(QWidget):
         self.immersive = False
         self.rotation = QTimer(self)
         self.rotation.timeout.connect(self.next_page)
+        self.guard = QTimer(self)
+        self.guard.setInterval(5000)
+        self.guard.timeout.connect(self.ensure_preview)
+        self.guard.start()
+        self.hide_timer = QTimer(self)
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.timeout.connect(self.stop_if_hidden)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 16)
         self.toolbar = QWidget()
@@ -245,6 +252,15 @@ class LivePage(QWidget):
         total = sum(self.last_metrics.get(i, {}).get("kbps", 0) for i in self.active)
         self.traffic.setText(f"媒体接收 {total/1000:.2f} Mbps")
 
+    def ensure_preview(self):
+        if not self.enabled or not self.connection or not self.isVisible():
+            return
+        for cid in list(self.active):
+            tile = self.tiles.get(cid)
+            if tile is None or not tile.player.want_play:
+                self.active.pop(cid, None)
+        self.reconcile()
+
     def swap_channels(self, source, destination):
         if source == destination or source not in self.tiles or destination not in self.tiles:
             return
@@ -290,8 +306,13 @@ class LivePage(QWidget):
             self.rotation.stop()
 
     def hideEvent(self, event):
-        self.stop_all()
+        # Native fullscreen transitions can briefly hide the entire window.
+        self.hide_timer.start(200)
         super().hideEvent(event)
+
+    def stop_if_hidden(self):
+        if not self.isVisible():
+            self.stop_all()
 
     def showEvent(self, event):
         super().showEvent(event)

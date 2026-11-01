@@ -2,7 +2,7 @@
 import ctypes
 import ctypes.util
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QTimer
+from PySide6.QtCore import QAbstractNativeEventFilter, Qt, QTimer
 from PySide6.QtGui import QCursor
 
 
@@ -19,6 +19,7 @@ class VideoMouseInput(QAbstractNativeEventFilter):
         self.clicks = objc.sel_registerName(b"clickCount")
         self.native_window = objc.sel_registerName(b"window")
         self.key_code = objc.sel_registerName(b"keyCode")
+        self.modifiers = objc.sel_registerName(b"modifierFlags")
         self.send = ctypes.CFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p)(
             ctypes.cast(objc.objc_msgSend, ctypes.c_void_p).value)
 
@@ -44,6 +45,31 @@ class VideoMouseInput(QAbstractNativeEventFilter):
             if code == 103:  # F11
                 QTimer.singleShot(0, self.window.toggle_fullscreen)
                 return True, 0
+            keys = {123: Qt.Key.Key_Left, 124: Qt.Key.Key_Right, 49: Qt.Key.Key_Space,
+                    33: Qt.Key.Key_BracketLeft, 30: Qt.Key.Key_BracketRight,
+                    24: Qt.Key.Key_Equal, 27: Qt.Key.Key_Minus}
+            flags = self.send(event, self.modifiers)
+            modifiers = Qt.KeyboardModifier.NoModifier
+            for flag, qt_flag in ((1 << 18, Qt.KeyboardModifier.ControlModifier),
+                                  (1 << 19, Qt.KeyboardModifier.AltModifier),
+                                  (1 << 20, Qt.KeyboardModifier.MetaModifier),
+                                  (1 << 17, Qt.KeyboardModifier.ShiftModifier)):
+                if flags & flag:
+                    modifiers |= qt_flag
+            if code in keys and self.window.playback.handle_key(keys[code], modifiers):
+                return True, 0
+            return False, 0
+        replay = self.window.playback
+        if replay.isVisible():
+            cursor = QCursor.pos()
+            for tile in replay.tiles.values():
+                if tile.surface.isVisible() and tile.surface.rect().contains(tile.surface.mapFromGlobal(cursor)):
+                    point = tile.surface.mapFromGlobal(cursor)
+                    tile.surface.setFocus()
+                    x, y = point.x()/max(1, tile.surface.width()), point.y()/max(1, tile.surface.height())
+                    QTimer.singleShot(0, lambda tile=tile, x=x, y=y: tile.surface.click_at(x, y, "native")
+                                      if not tile.disposed else None)
+                    return True, 0
             return False, 0
         if self.send(event, self.clicks) != 2:
             return False, 0

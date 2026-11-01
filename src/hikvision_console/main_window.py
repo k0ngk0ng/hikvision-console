@@ -150,6 +150,12 @@ class MainWindow(QMainWindow):
         QApplication.instance().installNativeEventFilter(self.video_mouse)
 
     def navigate(self, index):
+        previous = self.pages.currentWidget()
+        if previous is self.live and index != 0:
+            self.live.stop_all()
+        elif previous is self.playback and index != 1:
+            self.playback.cancel_face_scan(restore=False)
+            self.playback.stop_all()
         self.pages.setCurrentIndex(index)
         for i, item in enumerate(self.nav):
             item.setChecked(i == index)
@@ -400,7 +406,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def export_diagnostics(self):
-        data = {"version": "0.1.3", "device": None, "profile": self.live.profile.currentData(),
+        data = {"version": __version__, "device": None, "profile": self.live.profile.currentData(),
                 "transport": self.settings.get("transport", "tcp"), "metrics": self.live.last_metrics}
         if self.device:
             data["device"] = {"model": self.device.model, "firmware": self.device.firmware,
@@ -452,8 +458,11 @@ class MainWindow(QMainWindow):
         self.generation += 1
         self.health_timer.stop()
         self.live.stop_all()
+        self.live.guard.stop()
         self.live.rotation.stop()
         self.playback.cancel.set()
+        self.playback.cancel_face_scan(restore=False)
+        self.playback.controls_timer.stop()
         self.playback.stop_all()
         self.events.stop()
         self.exports.shutdown()

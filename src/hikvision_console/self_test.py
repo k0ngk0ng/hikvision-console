@@ -34,7 +34,7 @@ def windows_desktop_checks(surface):
             "window_icon": len(colors) > 2 and bool(send(int(surface.winId()), 0x007F, 1, 0))}
 
 
-def windows_double_click(surface):
+def windows_double_click(surface, double=True):
     """Use OS mouse input to hit the native VLC child, rather than bypass it with QtTest."""
     import ctypes
 
@@ -51,7 +51,8 @@ def windows_double_click(surface):
         user.mouse_event(0x0002, 0, 0, 0, 0)
         user.mouse_event(0x0004, 0, 0, 0, 0)
     click()
-    QTimer.singleShot(80, click)
+    if double:
+        QTimer.singleShot(80, click)
 
 
 def windows_ffmpeg_checks(path):
@@ -115,7 +116,9 @@ def run_components(app, path: Path, directory: Path):
                         "-frames:v", "1", "-y", str(frame)], check=True, timeout=20, **subprocess_options())
         decoded = QImage(str(frame))
         result["ffmpeg_decode"] = not decoded.isNull() and decoded.width() == 640
-        result["passed"] = all(result[key] for key in ("qt_surface", "vlc_player", "ffmpeg_decode"))
+        from .faces import detect_face
+        result["face_classifier"] = not detect_face(frame)
+        result["passed"] = all(result[key] for key in ("qt_surface", "vlc_player", "ffmpeg_decode", "face_classifier"))
     except Exception as exc:
         result["error"] = f"{type(exc).__name__}: {exc}"
     finally:
@@ -174,8 +177,14 @@ def run(app, path: Path, directory: Path):
         finished[0] = True
         image = QImage(str(screenshot))
         result["snapshot"] = not image.isNull() and image.width() > 0
+        try:
+            from .faces import detect_face
+            result["face_classifier"] = not detect_face(screenshot)
+        except Exception as exc:
+            result["face_classifier"] = False
+            result["face_error"] = str(exc)
         result["passed"] = bool(result["frames"] > 30 and result["pause"] and result["rate"]
-                                and result["snapshot"] and result["native_vout"])
+                                and result["snapshot"] and result["native_vout"] and result["face_classifier"])
         if sys.platform == "win32":
             result["passed"] &= all(result[key] for key in ("taskbar_identity", "window_icon", "native_double_click"))
             result["passed"] &= all(value for key, value in result.items() if key.startswith("ffmpeg_"))
@@ -201,10 +210,11 @@ def run(app, path: Path, directory: Path):
 
 def run_interaction(app, path: Path, directory: Path):
     """Exercise the actual fullscreen grid and native children using Windows mouse input."""
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
 
     from .main_window import MainWindow
-    from .models import Channel, Connection, Device
+    from .models import Channel, Connection, Device, Recording
     from .storage import Settings
 
     settings = Settings(directory / "settings")
@@ -237,7 +247,8 @@ def run_interaction(app, path: Path, directory: Path):
         window.grab().save(str(directory / "interaction.png"))
         window.screen().grabWindow(0).save(str(directory / "interaction-desktop.png"))
         result["passed"] = all(result.get(key) for key in ("native_mouse_registered", "focused", "returned",
-                                                         "normal_controls", "navigation_controls"))
+                                                         "normal_controls", "navigation_controls", "replay_click",
+                                                         "replay_keyboard", "rate_16_available"))
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "interaction-smoke.json").write_text(json.dumps(result, indent=2))
         window.close()
@@ -264,6 +275,32 @@ def run_interaction(app, path: Path, directory: Path):
             result["normal_controls"] = all(tile.footer.isVisible()
                                               and tile.footer.height() >= tile.footer.minimumSizeHint().height()
                                               for tile in window.live.tiles.values())
+            replay = window.playback
+            replay.set_device(SimpleNamespace(playback_url=lambda *args: path.resolve().as_uri()), device)
+            record = Recording(1, "101", device.time, device.time+timedelta(minutes=5), "rtsp://demo.invalid/track")
+            replay.records = {1: [record]}
+            replay.timeline.set_day(record.start, record.end, [record])
+            window.navigate(1)
+            replay.seek(device.time)
+            phase[0] = 4
+        elif phase[0] == 4 and window.playback.tiles[1].player.has_played:
+            window.toggle_fullscreen()
+            phase[0] = 5
+            QTimer.singleShot(800, lambda: windows_double_click(window.playback.tiles[1].surface, double=False))
+        elif phase[0] == 5 and window.playback.footer.isVisible():
+            result["replay_click"] = window.isFullScreen() and window.playback.timeline.isVisible()
+            import ctypes
+            user = ctypes.windll.user32
+            user.keybd_event(0x11, 0, 0, 0)  # Ctrl + Right, then Space
+            user.keybd_event(0x27, 0, 0, 0)
+            user.keybd_event(0x27, 0, 2, 0)
+            user.keybd_event(0x11, 0, 2, 0)
+            user.keybd_event(0x20, 0, 0, 0)
+            user.keybd_event(0x20, 0, 2, 0)
+            phase[0] = 6
+        elif phase[0] == 6 and window.playback.paused:
+            result["replay_keyboard"] = window.playback.clock >= device.time+timedelta(seconds=30)
+            result["rate_16_available"] = window.playback.speed.findData(16) >= 0
             finish()
     timer = QTimer()
     timer.timeout.connect(poll)

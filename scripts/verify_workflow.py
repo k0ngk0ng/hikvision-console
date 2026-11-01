@@ -47,6 +47,8 @@ target = None
 job = None
 pause_at = 0
 finished = False
+recovery_injected = False
+poll_busy = False
 
 
 def change_phase(value):
@@ -72,18 +74,30 @@ def finish(error=None):
     window.close()
 
 
-def poll():
-    global last_sample, target, job, pause_at
+def poll_step():
+    global last_sample, target, job, pause_at, recovery_injected
     elapsed = time.monotonic()-phase_start
     if phase == "connect":
         if window.device:
             report["checks"]["discovery"] = len(window.device.channels) == 8
             report["checks"]["legacy_time_mode"] = window.device.recording_time_mode == "local"
             window.live.toggle_preview()
+            window.toggle_fullscreen()
             change_phase("live")
         elif elapsed > 30:
             finish("Device discovery timeout")
     elif phase == "live":
+        if elapsed > 25 and not recovery_injected:
+            # Model the reported all-stream stop while preview remains enabled.
+            for tile in window.live.tiles.values():
+                if tile.channel.online:
+                    tile.player.stop()
+            recovery_injected = True
+            report["checks"]["fullscreen_recovery_injected"] = window.isFullScreen() and window.live.enabled
+        if recovery_injected and elapsed > 45:
+            online = [c.id for c in window.device.channels if c.online]
+            if all(window.live.tiles[cid].player.has_played for cid in online):
+                report["checks"]["all_streams_automatically_recovered"] = True
         if elapsed-last_sample >= 15:
             sample = {"seconds": round(elapsed), "channels": dict(window.live.last_metrics),
                       "visible": window.live.isVisible(), "active": dict(window.live.active),
@@ -93,6 +107,7 @@ def poll():
                               "states": sample["states"]}, ensure_ascii=False), flush=True)
             last_sample = elapsed
         if elapsed >= args.live_seconds:
+            report["checks"].setdefault("all_streams_automatically_recovered", False)
             online = [c.id for c in window.device.channels if c.online]
             report["checks"]["all_online_rendered"] = all(
                 any(s["channels"].get(cid, {}).get("frames", 0) > 0 for s in report["live_samples"])
@@ -108,6 +123,7 @@ def poll():
             window.live.swap_channels(1, 2)
             report["checks"]["drag_reuses_player"] = window.live.tiles[1] is old
             window.grab().save(str(directory / "live-ui.png"))
+            window.leave_fullscreen()
             window.navigate(1)
             report["checks"]["hidden_live_stopped"] = not window.live.active
             window.playback.channel.setCurrentIndex(window.playback.channel.findData(playback_channels[0]))
@@ -171,6 +187,19 @@ def poll():
                 finish()
         elif elapsed > 90:
             finish("Export timeout")
+
+
+def poll():
+    global poll_busy
+    if poll_busy:
+        return
+    poll_busy = True
+    try:
+        poll_step()
+    except Exception as exc:
+        finish(f"Workflow exception: {type(exc).__name__}: {exc}")
+    finally:
+        poll_busy = False
 
 
 timer = QTimer()

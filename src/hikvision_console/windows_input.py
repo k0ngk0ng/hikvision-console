@@ -3,7 +3,7 @@ import ctypes
 import sys
 from ctypes import wintypes
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QTimer
+from PySide6.QtCore import QAbstractNativeEventFilter, Qt, QTimer
 from PySide6.QtGui import QCursor
 
 
@@ -49,6 +49,17 @@ class VideoMouseInput(QAbstractNativeEventFilter):
         if not self.registered:
             return False, 0
         msg = wintypes.MSG.from_address(int(message))
+        if self.user.GetForegroundWindow() == int(self.window.winId()) and msg.message in (0x0100, 0x0104):
+            keys = {0x25: Qt.Key.Key_Left, 0x27: Qt.Key.Key_Right, 0x20: Qt.Key.Key_Space,
+                    0xDB: Qt.Key.Key_BracketLeft, 0xDD: Qt.Key.Key_BracketRight,
+                    0xBB: Qt.Key.Key_Equal, 0xBD: Qt.Key.Key_Minus}
+            modifiers = Qt.KeyboardModifier.NoModifier
+            for code, flag in ((0x11, Qt.KeyboardModifier.ControlModifier), (0x12, Qt.KeyboardModifier.AltModifier),
+                               (0x10, Qt.KeyboardModifier.ShiftModifier)):
+                if self.user.GetKeyState(code) & 0x8000:
+                    modifiers |= flag
+            if msg.wParam in keys and self.window.playback.handle_key(keys[msg.wParam], modifiers):
+                return True, 0
         if msg.message != 0x00FF or self.user.GetForegroundWindow() != int(self.window.winId()):
             return False, 0
         size = wintypes.UINT()
@@ -68,6 +79,18 @@ class VideoMouseInput(QAbstractNativeEventFilter):
 
     def left_down(self, timestamp):
         self.click_count += 1
+        replay = self.window.playback
+        if replay.isVisible():
+            cursor = QCursor.pos()
+            for tile in replay.tiles.values():
+                if tile.surface.isVisible() and tile.surface.rect().contains(tile.surface.mapFromGlobal(cursor)):
+                    point = tile.surface.mapFromGlobal(cursor)
+                    tile.surface.setFocus()
+                    x, y = point.x()/max(1, tile.surface.width()), point.y()/max(1, tile.surface.height())
+                    QTimer.singleShot(0, lambda tile=tile, x=x, y=y: tile.surface.click_at(x, y, "native")
+                                      if not tile.disposed else None)
+                    break
+            return
         page = self.window.live
         if not page.isVisible():
             self.previous = None

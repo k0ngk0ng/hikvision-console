@@ -46,7 +46,7 @@ def with_scale(message: bytes, rate: float):
 
 class RtspScaleProxy:
     def __init__(self, source: str, rate: float):
-        if rate not in (0.5, 1, 2, 4, 8):
+        if rate not in (0.5, 1, 2, 4, 8, 16):
             raise ValueError("Unsupported playback rate")
         self.rate = rate
         parsed = urlsplit(source)

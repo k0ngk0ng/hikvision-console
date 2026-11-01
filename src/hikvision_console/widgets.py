@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from time import monotonic
 
 from PySide6.QtCore import QMimeData, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QDrag, QPainter, QPen
@@ -124,6 +125,22 @@ class DragTitle(QLabel):
 
 class VideoSurface(QFrame):
     double_clicked = Signal()
+    point_clicked = Signal(float, float)
+
+    def click_at(self, x, y, source="qt"):
+        previous = getattr(self, "last_click", None)
+        now = monotonic()
+        if previous and previous[0] != source and now-previous[1] < 0.15:
+            return
+        self.last_click = (source, now)
+        self.point_clicked.emit(x, y)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setFocus(Qt.FocusReason.MouseFocusReason)
+            self.click_at(event.position().x()/max(1, self.width()),
+                          event.position().y()/max(1, self.height()))
+        super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -177,6 +194,8 @@ class VideoTile(QFrame):
         self.surface.setObjectName("VideoSurface")
         self.surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
         self.surface.setMinimumSize(180, 64)
+        self.surface.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.surface.point_clicked.connect(self.point_clicked)
         if not playback:
             # Rebuilding the grid can retire this native surface; wait until the
             # mouse event has returned before switching to the selected channel.
@@ -208,7 +227,7 @@ class VideoTile(QFrame):
         self.zoom = QComboBox()
         for text, value in (("1×", 1), ("1.5×", 1.5), ("2×", 2), ("3×", 3), ("4×", 4)):
             self.zoom.addItem(text, value)
-        self.zoom.setToolTip("数字放大（画面中心）")
+        self.zoom.setToolTip("数字放大；放大后单击画面调整中心")
         self.zoom.setFixedWidth(66)
         footer.addWidget(self.zoom)
         layout.addWidget(self.footer)
@@ -216,6 +235,15 @@ class VideoTile(QFrame):
         self.player.status.connect(self.set_state)
         self.player.metrics.connect(self._metrics)
         self.zoom.currentIndexChanged.connect(lambda: self.player.set_zoom(self.zoom.currentData()))
+
+    def point_clicked(self, x, y):
+        if self.player.zoom > 1:
+            # Coordinates within the current crop map back into the source frame.
+            value = self.player.zoom
+            cx, cy = self.player.zoom_center
+            cx = max(0.5/value, min(1-0.5/value, cx))
+            cy = max(0.5/value, min(1-0.5/value, cy))
+            self.player.set_zoom(value, (cx+(x-0.5)/value, cy+(y-0.5)/value))
 
     def focus_from_surface(self):
         # A native click may rebuild the grid before Qt delivers its queued
@@ -328,6 +356,7 @@ class Timeline(QWidget):
         self.records = []
         self.cursor = None
         self.zoom = 1
+        self.markers = []
 
     def set_day(self, start, end, records):
         self.start, self.end, self.records = start, end, records
@@ -357,13 +386,19 @@ class Timeline(QWidget):
             if a < b:
                 painter.fillRect(QRectF(self.position(a), 43, max(2, self.position(b)-self.position(a)), 25),
                                  QColor("#2cbf9a"))
+        painter.setPen(QPen(QColor("#c59aff"), 3))
+        for at in self.markers:
+            if self.start <= at <= self.end:
+                painter.drawLine(int(self.position(at)), 36, int(self.position(at)), 70)
         painter.setPen(QPen(QColor("#8598b0"), 1))
         ticks = max(4, min(12, self.width() // 90))
         for i in range(ticks + 1):
             at = self.start + (self.end-self.start) * i / ticks
             x = self.position(at)
             painter.drawLine(int(x), 71, int(x), 77)
-            painter.drawText(QRectF(x-25, 80, 50, 22), Qt.AlignmentFlag.AlignCenter, at.strftime("%H:%M"))
+            detailed = (self.end-self.start).total_seconds() < 600
+            painter.drawText(QRectF(x-40, 80, 80, 22), Qt.AlignmentFlag.AlignCenter,
+                             at.strftime("%H:%M:%S" if detailed else "%H:%M"))
         if self.cursor:
             x = self.position(self.cursor)
             painter.setPen(QPen(QColor("#f0bc67"), 2))

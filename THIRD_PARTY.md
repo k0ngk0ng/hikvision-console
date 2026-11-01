@@ -11,6 +11,8 @@ The application source is GPL-3.0-or-later. Binary distributions must retain the
 | imageio-ffmpeg | BSD-2-Clause; https://github.com/imageio/imageio-ffmpeg |
 | httpx / httpcore | BSD-3-Clause; https://github.com/encode/httpx and https://github.com/encode/httpcore |
 | defusedxml | PSF license; https://github.com/tiran/defusedxml |
+| OpenCV / opencv-python-headless (including frontal-face Haar cascade) | Apache-2.0 and bundled component notices; https://github.com/opencv/opencv and https://github.com/opencv/opencv-python |
+| NumPy | BSD-3-Clause and bundled component notices; https://github.com/numpy/numpy |
 | Python | PSF license; https://www.python.org/downloads/source/ |
 
 The packaging script reads the existing target-platform VLC installation. Before redistributing a binary, include the matching VLC/FFmpeg source and applicable component license texts or satisfy their corresponding-source requirements through your distribution channel. The private local test build is not a signed public release.

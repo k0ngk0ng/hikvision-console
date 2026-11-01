@@ -106,11 +106,14 @@ class Player(QObject):
         self.last_activity = time.monotonic()
         self.started_at = 0.0
         self.last_tick = time.monotonic()
+        self.last_position = -1
+        self.last_clock_activity = time.monotonic()
         self.clock_anchor = None
         self.has_played = False
         self.muted = True
         self.speed = 1.0
         self.zoom = 1.0
+        self.zoom_center = (0.5, 0.5)
         self.fill_surface = False
         self.retiring = []
         self.timer = QTimer(self)
@@ -140,22 +143,18 @@ class Player(QObject):
         self.paused = False
         self.retry_count = 0
         self.failure_streak = 0
+        self.try_open()
+
+    def try_open(self):
         try:
-            if url.startswith("rtsp://"):
-                from .media_bridge import StreamBridge
-                self.bridge = StreamBridge(url, 1 if live else self.speed, transport,
-                                           include_audio=not live or not self.muted)
             self._open()
         except (RuntimeError, OSError, ImportError, SystemExit):
-            self.want_play = False
-            if self.bridge:
-                self.bridge.stop()
-            self.status.emit("播放组件不可用 · 请检查 VLC 3.x、FFmpeg 及本地端口权限")
+            self._retry("播放组件不可用 · 请检查 VLC 3.x、FFmpeg 及本地端口权限")
 
     def _open(self):
         if not self.want_play:
             return
-        if self.bridge and self.bridge.cancelled.is_set():
+        if self.url.startswith("rtsp://") and (self.bridge is None or self.bridge.cancelled.is_set()):
             from .media_bridge import StreamBridge
             self.bridge = StreamBridge(self.url, 1 if self.live else self.speed, self.transport,
                                        include_audio=not self.live or not self.muted)
@@ -183,6 +182,8 @@ class Player(QObject):
         self.player.audio_set_mute(self.muted)
         self.last_frame = self.last_bytes = 0
         self.last_tick = self.last_activity = self.started_at = time.monotonic()
+        self.last_position = -1
+        self.last_clock_activity = self.started_at
         self.clock_anchor = None
         self.has_played = False
         if self.player.play() == -1:
@@ -231,7 +232,7 @@ class Player(QObject):
         delay = (1 if refresh else min(30, 2 ** min(self.failure_streak, 5))) + random.uniform(0.1, 1)
         self.status.emit(f"{reason} · {delay:.0f} 秒后重连（{self.retry_count}）")
         generation = self.generation
-        QTimer.singleShot(int(delay * 1000), lambda: self._open()
+        QTimer.singleShot(int(delay * 1000), lambda: self.try_open()
                           if self.want_play and generation == self.generation else None)
 
     def _tick(self):
@@ -285,6 +286,9 @@ class Player(QObject):
             self.status.emit("实时播放" if self.live else ("已暂停" if self.paused else "录像回放"))
         elapsed = max(0.1, now - self.last_tick)
         position_ms = self.player.get_time()
+        if position_ms != self.last_position or self.paused:
+            self.last_clock_activity = now
+        self.last_position = position_ms
         backlog = 0.0
         if self.live and self.has_played and position_ms > 0:
             if self.clock_anchor is None:
@@ -300,6 +304,9 @@ class Player(QObject):
         self.last_frame, self.last_bytes, self.last_tick = frames, byte_count, now
         if self.paused:
             self.last_activity = now
+            return
+        if self.has_played and position_ms >= 0 and now-self.last_clock_activity > PROFILES[self.profile].stall_seconds:
+            self._retry("播放时钟长时间没有更新")
             return
         if self.live and backlog > PROFILES[self.profile].stall_seconds:
             self._retry("实时画面持续落后 · 重新获取当前画面", refresh=True)
@@ -334,8 +341,10 @@ class Player(QObject):
     def screenshot(self, path: Path):
         return bool(self.player and self.player.video_take_snapshot(0, str(path), 0, 0) == 0)
 
-    def set_zoom(self, value):
+    def set_zoom(self, value, center=None):
         self.zoom = value
+        if center is not None:
+            self.zoom_center = tuple(max(0, min(1, v)) for v in center)
         if self.player:
             size = self.player.video_get_size(0)
             if not size or not size[0] or not size[1]:
@@ -345,7 +354,9 @@ class Player(QObject):
                 self.player.video_set_crop_geometry(None)
             else:
                 cw, ch = int(w / value), int(h / value)
-                self.player.video_set_crop_geometry(f"{cw}x{ch}+{(w-cw)//2}+{(h-ch)//2}")
+                x = max(0, min(w-cw, int(w*self.zoom_center[0]-cw/2)))
+                y = max(0, min(h-ch, int(h*self.zoom_center[1]-ch/2)))
+                self.player.video_set_crop_geometry(f"{cw}x{ch}+{x}+{y}")
 
 
 def shutdown_vlc():

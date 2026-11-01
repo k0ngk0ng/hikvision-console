@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 import imageio_ffmpeg
+import cv2
+from PyInstaller.utils.hooks import copy_metadata
 
 root = Path(SPECPATH).parent
 ffmpeg = shutil.which(imageio_ffmpeg.get_ffmpeg_exe())
@@ -32,6 +34,8 @@ binaries = [(ffmpeg, "." if sys.platform == "win32" else "imageio_ffmpeg/binarie
 datas = [(str(root / "README.md"), "."), (str(root / "LICENSE"), "."),
          (str(root / "THIRD_PARTY.md"), "."), (str(root / "assets/icon.svg"), "assets"),
          (str(root / "assets/icon.ico"), "assets")]
+datas += copy_metadata("opencv-python-headless") + copy_metadata("numpy")
+datas.append((str(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"), "cv2/data"))
 if sys.platform == "darwin":
     vlc_root = Path(os.environ.get("HIKVISION_VLC_DIR", "/Applications/VLC.app/Contents/MacOS"))
     if not (vlc_root / "lib/libvlc.dylib").exists():
@@ -53,7 +57,7 @@ elif sys.platform == "win32":
 a = Analysis([str(root / "packaging/launcher.py")], pathex=[str(root / "src")], binaries=binaries,
              datas=datas, hiddenimports=["vlc", "imageio_ffmpeg"],
              excludes=["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtQml",
-                       "PySide6.QtQuick", "PySide6.QtMultimedia", "numpy", "pytest"])
+                       "PySide6.QtQuick", "PySide6.QtMultimedia", "pytest"])
 if sys.platform == "win32":
     # imageio's hook may also collect its console build. Ship only our explicit
     # root-level executable, which ffmpeg_binary() selects without probing.
@@ -77,4 +81,4 @@ if sys.platform == "darwin":
                  icon=str(root / "assets/icon.icns"),
                  info_plist={"NSHighResolutionCapable": True,
                              "NSLocalNetworkUsageDescription": "Connect to the NVR you configure for live monitoring and recording playback.",
-                             "CFBundleShortVersionString": "0.1.3"})
+                             "CFBundleShortVersionString": "0.1.4"})

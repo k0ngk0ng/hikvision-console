@@ -27,7 +27,7 @@ def main():
     args.add_argument("--seconds", type=int, default=35)
     args.add_argument("--playback-minutes-ago", type=int)
     args.add_argument("--hardware", action="store_true")
-    args.add_argument("--speed", type=float, default=1, choices=[0.5, 1, 2, 4, 8])
+    args.add_argument("--speed", type=float, default=1, choices=[0.5, 1, 2, 4, 8, 16])
     args.add_argument("--snapshot", action="store_true")
     parsed = args.parse_args()
     secret = os.environ.get("NVR_PASSWORD") or Path(".nvrpass").read_text().strip()

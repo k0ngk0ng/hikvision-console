@@ -123,3 +123,41 @@ def test_refreshing_a_lagging_stream_does_not_accumulate_connection_failures(qtb
     assert max(delays) <= 2000
     assert player.failure_streak == 0
     assert player.hardware is True
+
+
+def test_render_counter_advancing_with_frozen_media_clock_recovers(qtbot, monkeypatch):
+    import hikvision_console.player as module
+    surface = QWidget()
+    qtbot.addWidget(surface)
+    p = Player(surface)
+    p.player = SimpleNamespace(get_state=lambda: "playing", get_time=lambda: 10000)
+    p.media = SimpleNamespace(get_stats=lambda stats: None)
+    p.has_played = True
+    p.last_position = 10000
+    p.last_clock_activity = 1
+    p.last_tick = 99
+    stats = SimpleNamespace(displayed_pictures=20, read_bytes=1000, demux_read_bytes=1000, lost_pictures=0)
+    monkeypatch.setattr(module.time, "monotonic", lambda: 100)
+    monkeypatch.setattr(module, "load_vlc", lambda: (SimpleNamespace(
+        State=SimpleNamespace(Error="error", Ended="ended"), MediaStats=lambda: stats), None))
+    failures = []
+    monkeypatch.setattr(p, "_retry", lambda reason, **options: failures.append(reason))
+    p._tick()
+    assert failures and "时钟" in failures[0]
+    p.player = p.media = None
+
+
+def test_component_open_failure_keeps_live_recovery_armed(qtbot, monkeypatch):
+    import hikvision_console.player as module
+    surface = QWidget()
+    qtbot.addWidget(surface)
+    p = Player(surface)
+    monkeypatch.setattr(p, "_open", lambda: (_ for _ in ()).throw(RuntimeError("unavailable")))
+    callbacks = []
+    monkeypatch.setattr(module.QTimer, "singleShot", lambda delay, callback: callbacks.append(callback))
+    p.start("file:///missing.mp4")
+    assert p.want_play
+    assert len(callbacks) == 1
+    callbacks.pop()()
+    assert len(callbacks) == 1
+    p.stop()
