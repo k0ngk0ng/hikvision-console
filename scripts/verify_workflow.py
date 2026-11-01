@@ -147,7 +147,8 @@ def poll_step():
             report["playback_samples"].append(sample)
             print(json.dumps({"phase": phase, **sample}, ensure_ascii=False), flush=True)
             last_sample = elapsed
-        if all(tile.player.has_played for tile in window.playback.tiles.values()):
+        if all(tile.player.has_played and tile.player.player and tile.player.want_play
+               for tile in window.playback.tiles.values()):
             report["checks"]["requested_playback_rendered"] = len(window.playback.tiles) == len(playback_channels)
             if len(playback_channels) > 1:
                 report["checks"]["linked_playback"] = True
@@ -163,7 +164,8 @@ def poll_step():
             window.playback.speed.setCurrentIndex(window.playback.speed.findData(2))
             change_phase("speed")
     elif phase == "speed":
-        if all(tile.player.has_played for tile in window.playback.tiles.values()):
+        if all(tile.player.has_played and tile.player.player and tile.player.want_play
+               and tile.player.bridge and tile.player.bridge.proxy for tile in window.playback.tiles.values()):
             report["checks"]["speed_request"] = all(tile.player.bridge.proxy.play_status == 200
                                                     for tile in window.playback.tiles.values())
             window.grab().save(str(directory / "playback-ui.png"))

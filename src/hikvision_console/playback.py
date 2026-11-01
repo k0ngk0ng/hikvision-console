@@ -597,6 +597,10 @@ class PlaybackPage(QWidget):
             return
         self.face_busy = True
         generation, when = self.face_generation, self.clock
+        if tile.player.player:
+            position = tile.player.player.get_time()
+            if position >= 0:
+                when = self.anchors.get(tile.channel.id, self.target)+timedelta(milliseconds=position)
 
         def success(found):
             if generation != self.face_generation or not self.face_scanning:
